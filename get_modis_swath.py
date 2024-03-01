@@ -1,6 +1,6 @@
 """
 """
-import gc
+#import gc
 import numpy as np
 from pathlib import Path
 import pickle as pkl
@@ -8,11 +8,11 @@ from datetime import datetime
 from datetime import timedelta
 from multiprocessing import Pool
 
-from krttdkit.operate import enhance as enh
-from krttdkit.products import FeatureGrid
+#from krttdkit.operate import enhance as enh
+#from krttdkit.products import FeatureGrid
 #from krttdkit.products import HyperGrid
-from krttdkit.visualize import guitools as gt
-from krttdkit.visualize import geoplot as gp
+#from krttdkit.visualize import guitools as gt
+#from krttdkit.visualize import geoplot as gp
 from krttdkit.acquire import modis
 from krttdkit.acquire import laads
 
@@ -115,27 +115,19 @@ if __name__=="__main__":
     data_dir = Path("data")
     modis_nc_dir = Path("/rstor/mdodson/modis_seus")
     modis_swath_dir = data_dir.joinpath("modis")
+
     """
-    Generate your own token with an EarthData account here:
+    Generate a API download  token with an EarthData account here:
     https://ladsweb.modaps.eosdis.nasa.gov/profiles/#generate-token-modal
 
-    Once you have it, put it directly into the 'laads-token' file as
+    Once you have it, put it directly into the 'laads-token.txt' file as
     raw text with no newline, ie `cat $TOKEN > token-dir/laads-token`
     """
-    token = str(data_dir.joinpath("laads-token").open("r").read()).strip()
+    token = str(data_dir.joinpath("laads-token.txt").open("r").read()).strip()
 
-    #swaths_pkl = data_dir.joinpath("buffer/terra_ceres_seus_2017.pkl")
-    #swaths_pkl = data_dir.joinpath("buffer/aqua_ceres_seus_2017.pkl")
-
-    #swaths_pkl = data_dir.joinpath("buffer/terra_ceres_seus_2015.pkl")
-    #swaths_pkl = data_dir.joinpath("buffer/aqua_ceres_seus_2015.pkl")
-
-    #swaths_pkl = data_dir.joinpath("buffer/terra_ceres_seus_2021.pkl")
-    #swaths_pkl = data_dir.joinpath("buffer/aqua_ceres_seus_2021.pkl")
-
-    #swaths_pkl = data_dir.joinpath("buffer/terra_ceres_seus_2019.pkl")
     swaths_pkl = data_dir.joinpath("buffer/aqua_ceres_seus_2019.pkl")
 
+    """  --( configuration )--  """
     modis_bands = [
             8,              # .41                       Near UV
             1,4,3,          # .64,.55,.46               (R,G,B)
@@ -152,6 +144,7 @@ if __name__=="__main__":
     bbox = ((28,38), (-95,-75))
     workers = 20
     keep_netcdfs = False
+    """  --( ------------- )--  """
 
     """
     Use the epoch time bounds from a CERES swath to set limits
@@ -166,7 +159,14 @@ if __name__=="__main__":
                    for C in ceres_swaths]
     #ceres = FG1D(ceres_labels, np.concatenate([C.data for C in ceres_swaths]))
 
-    """ Use pool multiprocessing to """
+    print(time_ranges)
+    exit(0)
+
+    """
+    Search for MODIS L1b files on the LAADS DAAC that were acquired at the same
+    time and in the same area as each CERES swath identified by
+    get_ceres_swath.py
+    """
     ## download modis data near the footprints
     isaqua = "aqua" in swaths_pkl.name.lower()
     assert isaqua or "terra" in swaths_pkl.name.lower()

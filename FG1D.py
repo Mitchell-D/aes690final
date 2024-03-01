@@ -13,12 +13,12 @@ from scipy.stats import linregress
 import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 
-from krttdkit.acquire import modis
+#from krttdkit.acquire import modis
 from krttdkit.operate import enhance as enh
-from krttdkit.products import FeatureGrid
-from krttdkit.products import HyperGrid
-from krttdkit.visualize import guitools as gt
-from krttdkit.visualize import geoplot as gp
+#from krttdkit.products import FeatureGrid
+#from krttdkit.products import HyperGrid
+#from krttdkit.visualize import guitools as gt
+#from krttdkit.visualize import geoplot as gp
 
 class FG1D:
     def __init__(self, labels, data):
