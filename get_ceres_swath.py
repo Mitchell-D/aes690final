@@ -87,8 +87,9 @@ label_mapping = [
 def parse_ceres(ceres_nc:Path):
     """
     Parses fields from a full-featured CERES SSF file, and returns it as a
-    2-tuple like (labels:list[str], data:list[np.array]) where all of the data
-    arrays are size C for C CERES footprints
+    2-tuple like (labels:list[str], data:np.array) where the unique string
+    feature labels name the second dimension of the (C,F) shaped data array
+    having C CERES footprints evaluated with F features.
 
     This method extracts datasets and assigns labels based on the label_mapping
     list configured above.
@@ -108,7 +109,7 @@ def parse_ceres(ceres_nc:Path):
             assert len(X.shape)==1
             data.append(X)
             labels.append(l)
-    return labels, data
+    return labels, np.stack(data, axis=-1)
 
 def jday_to_epoch(jday:float, ref_jday:int, ref_gday:datetime):
     """
@@ -120,11 +121,15 @@ def jday_to_epoch(jday:float, ref_jday:int, ref_gday:datetime):
     """
     return (ref_gday + timedelta(days=jday-ref_jday)).timestamp()
 
+
 if __name__=="__main__":
-    ceres_nc_dir = Path("data/ceres") ## directory of netCDFs from LARC
-    swath_pkl_dir =  Path("data/swaths") ## pickle with a list of swath FGs
+    data_dir = Path("data")
+    #data_dir = Path("/rstor/mdodson/aes690final/ceres")
+    ceres_nc_dir = data_dir.joinpath("ceres") ## directory of netCDFs from LARC
+    ## Directory containing pickles corresponding to lists of swath FGs
+    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
     ## Upper bound on sza to restrict daytime pixels
-    ub_sza = 80
+    ub_sza = 75
     ## Upper bound on viewing zenith angle (MODIS FOV is like 45)
     ub_vza = 35
     ## minimum amount of time between swaths (sec)
@@ -138,8 +143,7 @@ if __name__=="__main__":
     ref_gday = datetime(year=1980,month=1,day=1)
 
     ## netCDF from https://ceres-tool.larc.nasa.gov/ord-tool/
-    ceres_files = [f for f in ceres_nc_dir.iterdir()
-                   if f.suffix == ".nc"]
+    ceres_files = [f for f in ceres_nc_dir.iterdir() if f.suffix == ".nc"]
 
     """
     Preprocessing:
@@ -157,17 +161,20 @@ if __name__=="__main__":
               np.unique(np.round(ceres.data('jday'))).size
               )
 
+        ## Convert julian days to epochs and replace them as a feature
         epoch = np.array([jday_to_epoch(jday, ref_jday, ref_gday)
                           for jday in ceres.data("jday")])
-        ceres.drop_data("jday")
-        ## add epochs as a feature
         ceres.add_data("epoch", epoch)
+        ceres.drop_data("jday")
+
         ## Only consider daytime swaths for now.
         cday = ceres.mask(ceres.data("sza")<=ub_sza)
         ## limit the maximum FOV to a reasonable range
         ceres = cday.mask(cday.data("vza")<=ub_vza)
         ## Split footprints into individual swaths based on acquisition time.
-        ## >5 minutes probably means it's a different swath.
+        ## >5 minutes almost certainly means it's a different swath. This was
+        ## shown to be an effective heuristic for the several test regions,
+        ## but the assumption could break down at the poles.
         tmask = np.concatenate((np.array([True]), np.diff(
             ceres.data("epoch"))>lb_swath_interval))
         approx_times = ceres.data("epoch")[tmask]

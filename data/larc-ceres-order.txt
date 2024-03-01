@@ -1,0 +1,21 @@
+## List of CERES files ordered for the specified fields of regard
+
+## NEUS region: lat=[34,43], lon=[-69,-79]
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir1/CERES_SSF_Terra-XTRK_Edition4A_Subset_2018010102-2020111203.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir1/CERES_SSF_Terra-XTRK_Edition4A_Subset_2020111215-2020123116.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir2/CERES_SSF_Aqua-XTRK_Edition4A_Subset_2018010107-2020112907.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir2/CERES_SSF_Aqua-XTRK_Edition4A_Subset_2020112918-2020123118.nc.gz
+
+## HKH region: lat=[32,38], lon=[69,79]
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir3/CERES_SSF_Aqua-XTRK_Edition4A_Subset_2018010108-2020123122.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir4/CERES_SSF_Terra-XTRK_Edition4A_Subset_2018010104-2020123117.nc.gz
+
+## IDN region: lat=[-5,5], lon=[120,130]
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir5/CERES_SSF_Terra-XTRK_Edition4A_Subset_2018010101-2020081513.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir5/CERES_SSF_Terra-XTRK_Edition4A_Subset_2020081602-2020123114.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir6/CERES_SSF_Aqua-XTRK_Edition4A_Subset_2020091605-2020123117.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir6/CERES_SSF_Aqua-XTRK_Edition4A_Subset_2018010104-2020091604.nc.gz
+
+## AZN region: lat=[-3,-8], lon=[-65,-70]
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir7/CERES_SSF_Aqua-XTRK_Edition4A_Subset_2018010105-2020123118.nc.gz
+https://ceres-tool.larc.nasa.gov/ord-tool/data1//CERES_2024-02-29:31600/dir8/CERES_SSF_Terra-XTRK_Edition4A_Subset_2018010102-2020123115.nc.gz

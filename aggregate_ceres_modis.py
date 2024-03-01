@@ -13,22 +13,7 @@ from krttdkit.operate import enhance as enh
 
 from FG1D import FG1D
 
-def haversine(lat1, lon1, lat2, lon2, height=6.3781e6):
-    """
-    Calculate great circle distance of equal length arguments.
-    This method is intended to be numpy-vectorized
-    """
-    lat1,lon1,lat2,lon2 = map(np.radians, (lat1,lon1,lat2,lon2))
-
-    dlon = lon2 - lon1
-    dlat = lat2 - lat1
-
-    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
-
-    return height * 2 * np.arcsin(np.sqrt(a))
-
-def aggregate_ceres_modis(swath_path:tuple, keep_closest:int,
-        modis_features:list=None, debug=False):
+def aggregate_ceres_modis(swath_path:tuple, keep_closest:int, debug=False):
     """
     1. Load imager pixel data from modis pkl
     2. Iterate over footprints, calculating great circle distance to each
@@ -107,6 +92,20 @@ def aggregate_ceres_modis(swath_path:tuple, keep_closest:int,
     return tuple(zip((ceres.labels, modis.labels+["dist", "azi"]),
         map(np.vstack, zip(*footprints))))
 
+def haversine(lat1, lon1, lat2, lon2, height=6.3781e6):
+    """
+    Calculate great circle distance of equal length arguments.
+    This method is intended to be numpy-vectorized
+    """
+    lat1,lon1,lat2,lon2 = map(np.radians, (lat1,lon1,lat2,lon2))
+
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+
+    return height * 2 * np.arcsin(np.sqrt(a))
+
 def mp_aggregate_ceres_modis(args:tuple):
     """
     given a 2-tuple like (ceres:FG1D, modis:Path), aggregates modis
@@ -176,7 +175,7 @@ if __name__=="__main__":
             if str(year) in p.name
             ], key=lambda t:t[0][0])
 
-    #'''
+    '''
     """
     Iterate over all available swaths, aggregate modis pixels, and store each
     swath as a new pkl object in agg_dir
@@ -198,9 +197,9 @@ if __name__=="__main__":
                 print(e)
             finally:
                 swath_count += 1
-    #'''
-
     '''
+
+    #'''
     """ Single-file test run """
     ceres, modis = aggregate_ceres_modis(
             swath_path=modis_swath_files.pop(0)[1],
@@ -208,10 +207,10 @@ if __name__=="__main__":
             debug=True,
             )
     print(ceres.shape, modis.shape)
-    exit(0)
+    #exit(0)
     '''
 
-    '''
+    #'''
     """
     Collect and match overpass epoch times of each sensor collection to find
     missing data files. modis swath pkls have the ceres data already.
@@ -228,7 +227,7 @@ if __name__=="__main__":
             np.argmin(np.abs(ceres_swath_times-modtime))
             for modtime in modis_swath_times
             ]
-    '''
+    #'''
 
     '''
     """

@@ -1,5 +1,4 @@
-"""
-"""
+"""  """
 #import gc
 import numpy as np
 from pathlib import Path
@@ -125,7 +124,8 @@ if __name__=="__main__":
     """
     token = str(data_dir.joinpath("laads-token.txt").open("r").read()).strip()
 
-    swaths_pkl = data_dir.joinpath("buffer/aqua_ceres_seus_2019.pkl")
+    swaths_pkl = data_dir.joinpath(
+            "ceres_swaths/ceres-ssf_idn_aqua_20200916-20201231.pkl")
 
     """  --( configuration )--  """
     modis_bands = [
@@ -160,6 +160,7 @@ if __name__=="__main__":
     #ceres = FG1D(ceres_labels, np.concatenate([C.data for C in ceres_swaths]))
 
     print(time_ranges)
+    print(ceres_swaths.pop(0).labels)
     exit(0)
 
     """
