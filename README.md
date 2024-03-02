@@ -3,13 +3,13 @@
 Take 2 on disaggregating CERES footprints to MODIS resolution.
 
 <p align="center">
-  <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-bispec_2020-06-22_0819Z.png" />
-  <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-contour_2019-12-04_0825Z.png" />
+  <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-bispec_2020-06-22_0819Z.png" />
+  <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-contour_2019-12-04_0825Z.png" />
 </p>
 
 <p align="center">
-  <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_lwflux.png" />
-  <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_swflux.png" />
+  <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_lwflux.png" />
+  <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_swflux.png" />
 </p>
 
 <p align="center"> CERES swath over the Hindu-Kush Himilayan region </p>
