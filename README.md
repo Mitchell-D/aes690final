@@ -3,8 +3,8 @@
 Take 2 on disaggregating CERES footprints to MODIS resolution.
 
 <p align="center">
-  <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-bispec_2020-06-22_0819Z.png" />
-  <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-contour_2019-12-04_0825Z.png" />
+  <img height="384" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-bispec_2020-06-22_0819Z.png" />
+  <img height="384" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/flux-contour_2019-12-04_0825Z.png" />
 </p>
 
 <p align="center">
