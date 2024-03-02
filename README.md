@@ -16,7 +16,7 @@ Take 2 on disaggregating CERES footprints to MODIS resolution.
 
 ## get\_ceres\_swath.py
 
-Ingest a directory of CERES SSF netCDF files acquired from
+Ingest a directory of CERES SSF E4A netCDF files acquired from
 [the NASA LARC downloader][1], and store them as a pickle file
 containing a list of 2-tuples each corresponding to a distinct
 satellite overpass parsed from the multi-day file.
