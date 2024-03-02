@@ -72,6 +72,9 @@ class FG1D:
                 self.data(label).filled(value)
 
     def mask(self, mask:np.ndarray):
+        """
+        Return a FG1D object only including samples with True mask values.
+        """
         assert mask.size == self.size
         return FG1D(self.labels, self._data[mask])
 

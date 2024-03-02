@@ -129,8 +129,6 @@ class FeatureGridV2:
     def data(self, flabel:str=None, mlabel:str=None, **kwargs):
         """
         Return a FeatureGrid with the requested constraints
-
-
         """
 
         ##

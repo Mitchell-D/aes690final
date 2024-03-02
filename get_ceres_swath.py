@@ -19,6 +19,7 @@ import pickle as pkl
 from datetime import datetime
 from datetime import timedelta
 from pathlib import Path
+from pprint import pprint as ppt
 
 from FG1D import FG1D
 
@@ -131,7 +132,7 @@ if __name__=="__main__":
     ## Upper bound on sza to restrict daytime pixels
     ub_sza = 75
     ## Upper bound on viewing zenith angle (MODIS FOV is like 45)
-    ub_vza = 35
+    ub_vza = 30
     ## minimum amount of time between swaths (sec)
     lb_swath_interval = 300
     ## maximum amount of time included in a swath (sec)
@@ -162,15 +163,37 @@ if __name__=="__main__":
               )
 
         ## Convert julian days to epochs and replace them as a feature
-        epoch = np.array([jday_to_epoch(jday, ref_jday, ref_gday)
-                          for jday in ceres.data("jday")])
+        epoch = np.array([
+            jday_to_epoch(jday, ref_jday, ref_gday)
+            for jday in ceres.data("jday")
+            ])
         ceres.add_data("epoch", epoch)
         ceres.drop_data("jday")
 
+        ## NaN values are marked in the SSF files with values >1e35
+        is_valid = lambda X: X < 1e30
+
+        ## Drop all features that must be valid (radiative fluxes)
+        ## Cloud, aerosol and surface type features may still have nan (>1e35)
+        ## values, which should be dealt with by the user.
+        ## In the future, FeatureGrid should support generating boolean masks
+        ## for those features that are stored by default alongside the array.
+        reject_if_nan = ("swflux", "wnflux", "lwflux")
+        for l in reject_if_nan:
+            ceres = ceres.mask(is_valid(ceres.data(l)))
+
+        ## Check the ratio of masked/unmasked values for each feature
+        #'''
+        for l in ceres.labels:
+            valid_counts = np.sum((is_valid(ceres.data(l))).astype(int))
+            print(l, valid_counts/ceres.size)
+        #'''
+
         ## Only consider daytime swaths for now.
-        cday = ceres.mask(ceres.data("sza")<=ub_sza)
-        ## limit the maximum FOV to a reasonable range
-        ceres = cday.mask(cday.data("vza")<=ub_vza)
+        ceres = ceres.mask(ceres.data("sza")<=ub_sza)
+        ## Limit the FoV to prevent problems with panoramic distortion
+        ceres = ceres.mask(ceres.data("vza")<=ub_vza)
+
         ## Split footprints into individual swaths based on acquisition time.
         ## >5 minutes almost certainly means it's a different swath. This was
         ## shown to be an effective heuristic for the several test regions,
@@ -183,6 +206,7 @@ if __name__=="__main__":
         all_swaths = []
         for stime in approx_times:
             smask = np.abs(ceres.data("epoch")-stime)<lb_swath_interval*3
+            print(datetime.fromtimestamp(stime), np.count_nonzero(smask))
             swath = ceres.mask(smask)
             all_swaths.append(swath)
 
