@@ -24,12 +24,12 @@ def scatter(ceres_fg1d:FG1D, xlabel, ylabel, clabel=None, get_trend=False,
     optionally coloring points by a third dataset
     """
     ps = {"xlabel":xlabel, "ylabel":ylabel, "clabel":clabel,
-          "trend_color":"red", "trend_width":3, "marker_size":4,
-          "cmap":"nipy_spectral", "text_size":12, "title":"",
-          "norm":"linear", "logx":False,"figsize":(16,12)}
+          "trend_color":"red", "trend_width":3, "marker_size":6,
+          "cmap":"nipy_spectral", "text_size":18, "title":"",
+          "norm":"linear", "logx":False,"figsize":(12,12)}
     ps.update(plot_spec)
 
-    plt.clf()
+    #plt.clf()
     plt.rcParams.update({"font.size":ps["text_size"]})
 
     X, Y = mutual_valid(
@@ -132,7 +132,7 @@ def geo_scatter(ceres_fg1d:FG1D, clabel, xlabel="lat", ylabel="lon",
     """ """
     ps = {"xlabel":xlabel, "ylabel":ylabel, "marker_size":4,
           "cmap":"nipy_spectral", "text_size":12, "title":clabel,
-          "norm":None,"figsize":(12,12)}
+          "norm":None,"figsize":(12,12), "marker":"o"}
     plt.clf()
     ps.update(plot_spec)
     plt.rcParams.update({"font.size":ps["text_size"]})
@@ -160,7 +160,8 @@ def geo_scatter(ceres_fg1d:FG1D, clabel, xlabel="lat", ylabel="lon",
     scat = ax.scatter(ceres_fg1d.data(ylabel),ceres_fg1d.data(xlabel),
                       c=ceres_fg1d.data(clabel), s=ps.get("marker_size"),
                       transform=ccrs.PlateCarree(), zorder=100,
-                      cmap=ps.get("cmap"), norm=ps.get("norm"))
+                      cmap=ps.get("cmap"), norm=ps.get("norm"),
+                      marker=ps.get("marker"))
     fig.colorbar(scat)
 
     if not fig_path is None:
@@ -175,11 +176,12 @@ def dual_contour_plot(
         show=False, fig_path:Path=None, plot_spec={}
         ):
     ps = {"xlabel":"longitude", "ylabel":"latitude", "marker_size":4,
-          "cmap":"nipy_spectral", "text_size":12, "title":"",
-          "norm":"linear","figsize":(24,24), "dpi":100, "cbar_loc":"right"}
+          "cmap":"nipy_spectral", "text_size":16, "title":"",
+          "norm":"linear","fig_size":(12,12), "dpi":80, "cbar_loc":"right"}
     ps.update(plot_spec)
 
     fig,(ax1,ax2) = plt.subplots(ncols=2)
+    fig.set_size_inches(*ps.get("fig_size"))
     ax1.set_title(title_left)
     ax1.set_xlabel(ps.get("xlabel"))
     ax1.set_ylabel(ps.get("ylabel"))
@@ -192,14 +194,13 @@ def dual_contour_plot(
     cf2 = ax2.contourf(hcoords, vcoords, data_right, bins, cmap=ps.get("cmap"))
     fig.colorbar(cf2, ax=ax2, location=ps.get("cbar_loc"))
 
-    plt.rcParams.update({"font.size":ps["text_size"]})
+    #plt.rcParams.update({"font.size":ps["text_size"]})
     fig.tight_layout()
 
     if show:
         plt.show()
     if not fig_path is None:
-        fig.savefig(fig_path.as_posix(), bbox_inches="tight",
-                    dpi=ps.get("dpi"))
+        fig.savefig(fig_path.as_posix(), dpi=ps.get("dpi"))
 
 def contour_plot(
         hcoords, vcoords, data, bins=64,
@@ -249,12 +250,11 @@ if __name__=="__main__":
 
 
     ## Interpolate the CERES footprints of random swaths onto a geographic grid
-    #'''
-    #seed = 20240301
-    seed = None
-    num_samples = 8
-    lat_res = .1
-    lon_res = .1
+    seed = 2023
+    #seed = None
+    num_samples = 4
+    lat_res = .05
+    lon_res = .05
 
     rng = np.random.default_rng(seed=seed)
     random_swath_idxs = np.arange(len(ceres_swaths))
@@ -263,12 +263,13 @@ if __name__=="__main__":
     for i in range(num_samples):
         fg = ceres_swaths[random_swath_idxs[i]]
         ## Convert the acquisition time to a string
+        interp_features = ("swflux", "lwflux")
         timestr = datetime.fromtimestamp(
                 int(np.average(fg.data("epoch")))
                 ).strftime("%Y-%m-%d_%H%MZ")
 
         ## Extract shortwave and longwave feature data and interpolate it
-        interp_features = ("swflux", "lwflux")
+        '''
         geo_grid,lat,lon = zip(*[
                 interp_1d_to_geo_grid(
                     data=fg.data(l),
@@ -276,7 +277,7 @@ if __name__=="__main__":
                     lon=fg.data("lon"),
                     lat_res=lat_res,
                     lon_res=lon_res,
-                    interp_method="nearest",
+                    interp_method="linear",
                     )
                 for l in interp_features
                 ])
@@ -288,35 +289,69 @@ if __name__=="__main__":
         dual_contour_plot(
                 hcoords=glon,
                 vcoords=glat,
+                bins=128,
                 data_left=geo_grid[...,0],
                 data_right=geo_grid[...,1],
                 title_left=str(interp_features[0])+" "+timestr,
                 title_right=str(interp_features[1])+" "+timestr,
-                show=False,
-                fig_path=fig_dir.joinpath(f"flux-contour_{timestr}.png")
+                #show=True,
+                fig_path=fig_dir.joinpath(f"flux-contour_{timestr}.png"),
+                plot_spec={
+                    "text_size":12,
+                    },
                 )
-    #'''
+        '''
 
-    ## Geolocated scatterplot of actual data values (with basemap)
-    '''
-    geo_scatter(
-            ceres_fg1d=ceres_swaths.pop(0),
-            clabel="swflux",
-            show=False,
-            fig_path=fig_dir.joinpath(f"ceres-ssf_swflux_sample.png"),
-            plot_spec={"title":"swflux", "marker_size":50}
-            )
-    '''
+        ## Make a scatterplot of the features with a linear best-fit trend.
+        '''
+        scatter(ceres_fg1d=fg,
+                xlabel=interp_features[0],
+                ylabel=interp_features[1],
+                clabel="vza",
+                show=False,
+                fig_path=fig_dir.joinpath(f"flux-bispec_{timestr}.png"),
+                get_trend=True,
+                plot_spec={
+                    "title":timestr,
+                    "text_size":18,
+                    }
+                )
+        '''
 
-    ## Heatmap comparing two FG1D variables
-    '''
-    heatmap(fg,
-            "swflux",
-            "lwflux",
-            xbins=8,
-            ybins=8,
-            show=True,
-            fig_path=None,
-            plot_spec={}
-            )
-    '''
+        ## Geolocated scatterplot of actual data values (with basemap)
+        #'''
+        geo_scatter(
+                ceres_fg1d=fg,
+                clabel="swflux",
+                show=True,
+                #fig_path=fig_dir.joinpath(f"geo_scatter_{timestr}_swflux.png"),
+                plot_spec={
+                    "title":f"swflux {timestr}",
+                    "marker_size":100,
+                    "marker":","
+                    }
+                )
+        geo_scatter(
+                ceres_fg1d=fg,
+                clabel="lwflux",
+                show=True,
+                #fig_path=fig_dir.joinpath(f"geo_scatter_{timestr}_lwflux.png"),
+                plot_spec={
+                    "title":f"lwflux {timestr}",
+                    "marker_size":100,
+                    "marker":",",
+                    },
+                )
+        #'''
+
+        '''
+        heatmap(fg,
+                "swflux",
+                "lwflux",
+                xbins=8,
+                ybins=8,
+                show=True,
+                fig_path=None,
+                plot_spec={}
+                )
+        '''
