@@ -128,11 +128,11 @@ def heatmap(ceres_fg1d:FG1D, xlabel, ylabel, xbins=256, ybins=256,
         plt.show()
 
 def geo_scatter(ceres_fg1d:FG1D, clabel, xlabel="lat", ylabel="lon",
-                bounds=None, plot_spec={}, show=True, fig_path=None):
+                bounds=None, plot_spec={}, show=False, fig_path=None):
     """ """
     ps = {"xlabel":xlabel, "ylabel":ylabel, "marker_size":4,
           "cmap":"nipy_spectral", "text_size":12, "title":clabel,
-          "norm":None,"figsize":(12,12), "marker":"o"}
+          "norm":None,"figsize":(12,12), "marker":"o", "cbar_shrink":1.}
     plt.clf()
     ps.update(plot_spec)
     plt.rcParams.update({"font.size":ps["text_size"]})
@@ -162,7 +162,7 @@ def geo_scatter(ceres_fg1d:FG1D, clabel, xlabel="lat", ylabel="lon",
                       transform=ccrs.PlateCarree(), zorder=100,
                       cmap=ps.get("cmap"), norm=ps.get("norm"),
                       marker=ps.get("marker"))
-    fig.colorbar(scat)
+    fig.colorbar(scat, ax=ax, shrink=ps.get("cbar_shrink"))
 
     if not fig_path is None:
         fig.set_size_inches(*ps.get("figsize"))
@@ -328,7 +328,9 @@ if __name__=="__main__":
                 plot_spec={
                     "title":f"swflux {timestr}",
                     "marker_size":100,
-                    "marker":","
+                    "marker":",",
+                    "text_size":16,
+                    "cbar_shrink":.6,
                     }
                 )
         geo_scatter(
@@ -340,6 +342,8 @@ if __name__=="__main__":
                     "title":f"lwflux {timestr}",
                     "marker_size":100,
                     "marker":",",
+                    "text_size":16,
+                    "cbar_shrink":.6,
                     },
                 )
         #'''
