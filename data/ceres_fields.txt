@@ -1,0 +1,57 @@
+(2695968,)   time                                                                   17167.137 17532.755
+(2695968,)   lon                                                                    -95.000 -75.000
+(2695968,)   lat                                                                    28.000 38.000
+(2695968,)   Time_of_observation                                                    2457754.637 2458120.255
+(2695968,)   Longitude_of_CERES_FOV_at_surface                                      265.000 285.000
+(2695968,)   Colatitude_of_CERES_FOV_at_surface                                     52.000 62.000
+(2695968,)   CERES_SW_TOA_flux___upwards                                            0.000 984.385
+(2695968,)   CERES_SW_radiance___upwards                                            0.000 504.772
+(2695968,)   CERES_LW_TOA_flux___upwards                                            83.163 474.874
+(2695968,)   CERES_LW_radiance___upwards                                            25.649 137.499
+(2695968,)   CERES_WN_TOA_flux___upwards                                            8.625 154.803
+(2695968,)   CERES_WN_radiance___upwards                                            2.562 39.096
+(2695968,)   TOA_Incoming_Solar_Radiation                                           543.827 1311.718
+(2695968,)   Longitude_of_subsatellite_point_at_surface_at_observation              251.947 298.086
+(2695968,)   Colatitude_of_subsatellite_point_at_surface_at_observation             49.273 76.025
+(2695968,)   CERES_viewing_zenith_at_surface                                        0.172 80.086
+(2695968,)   CERES_relative_azimuth_at_surface                                      0.031 359.995
+(2695968,)   CERES_solar_zenith_at_surface                                          7.211 167.617
+(2695968,)   CERES_downward_SW_surface_flux___Model_B                               0.000 1061.655
+(2695968,)   CERES_net_SW_surface_flux___Model_B                                    0.000 1019.021
+(2695968,)   CERES_downward_SW_surface_flux___Model_B__clearsky                     0.000 1061.655
+(2695968,)   CERES_downward_LW_surface_flux___Model_B                               154.567 490.851
+(2695968,)   CERES_net_LW_surface_flux___Model_B                                    -210.431 21.004
+(2695968,)   CERES_downward_LW_surface_flux___Model_B__clearsky                     154.567 465.293
+(2695968,)   Altitude_of_surface_above_sea_level                                    0.000 1157.496
+(2695968, 8) Surface_type_index                                                     1.000 19.000
+(2695968, 8) Surface_type_percent_coverage                                          0.000 100.000
+(2695968,)   CERES_LW_surface_emissivity                                            0.982 1.000
+(2695968,)   CERES_WN_surface_emissivity                                            0.977 1.000
+(2695968,)   Surface_wind___U_vector                                                -18.986 14.894
+(2695968,)   Surface_wind___V_vector                                                -19.844 14.338
+(2695968,)   Surface_skin_temperature                                               254.653 315.172
+(2695968,)   Surface_pressure                                                       906.516 1039.810
+(2695968,)   Column_averaged_relative_humidity                                      8.136 97.342
+(2695968,)   Surface_minus_750_mb_air_temperature_difference                        -13.527 30.097
+(2695968,)   750_mb_minus_surface_air_potential_temperature_difference              -5.518 36.808
+(2695968,)   Precipitable_water                                                     0.127 7.851
+(2695968,)   Cloud_mask_clear_strong_percent_coverage                               0.000 100.000
+(2695968,)   Cloud_mask_clear_weak_percent_coverage                                 0.000 100.000
+(2695968,)   CWG_surface_skin_temperature                                           254.628 316.691
+(2695968, 4) Clear_layer_overlap_percent_coverages                                  0.000 100.000
+(2695968, 2) Mean_visible_optical_depth_for_cloud_layer                             0.050 150.000
+(2695968, 2) Stddev_of_visible_optical_depth_for_cloud_layer                        0.000 74.596
+(2695968,)   Percentage_of_CERES_FOV_with_MODIS_land_aerosol                        0.000 100.000
+(2695968,)   PSF_wtd_MOD04_cloud_fraction_land                                      0.000 100.000
+(2695968,)   PSF_wtd_MOD04_aerosol_types_land                                       0.000 900.000
+(2695968,)   PSF_wtd_MOD04_corrected_optical_depth_land__0_550_                     0.000 2.390
+(2695968,)   Percentage_of_CERES_FOV_with_MODIS_deep_blue_aerosol                   0.000 100.000
+(2695968,)   PSF_wtd_MOD04_deep_blue_aerosol_optical_depth_land__0_550_             0.000 1.000
+(2695968,)   PSF_wtd_MOD04_deep_blue_angstrom_exponent_land                         0.500 1.800
+(2695968,)   PSF_wtd_MOD04_deep_blue_single_scattering_albedo_land__0_470_          0.883 1.000
+(2695968,)   Percentage_of_CERES_FOV_with_MODIS_ocean_aerosol                       0.000 100.000
+(2695968,)   PSF_wtd_MOD04_cloud_fraction_ocean                                     0.000 100.000
+(2695968,)   PSF_wtd_MOD04_effective_optical_depth_average_ocean__0_550_            0.000 1.871
+(2695968,)   PSF_wtd_MOD04_optical_depth_small_average_ocean__0_550_                0.000 1.750
+(2695968,)   Packet_number                                                          1205.000 9892.000
+(2695968,)   Scan_sample_number                                                     70.000 597.000

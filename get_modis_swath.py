@@ -7,7 +7,7 @@ from datetime import datetime
 from datetime import timedelta
 from multiprocessing import Pool
 
-#from krttdkit.operate import enhance as enh
+from krttdkit.operate import enhance as enh
 #from krttdkit.products import FeatureGrid
 #from krttdkit.products import HyperGrid
 #from krttdkit.visualize import guitools as gt
@@ -18,8 +18,9 @@ from krttdkit.acquire import laads
 from FG1D import FG1D
 
 def get_modis_swath(init_time:datetime, final_time:datetime, laads_token:str,
-                    modis_nc_dir:Path, bands:tuple, latlon_bbox:tuple,
-                    keep_rad=False, adjsec=1200, isaqua=False, debug=False):
+                    modis_nc_dir:Path, bands:tuple, keep_rad=False,
+                    ub_vza=180, ub_sza=180, latlon_bbox=((-90,90),(-180,180)),
+                    adjsec=1200, isaqua=False, debug=False):
     """
     Kicks off process of developing datasets of MODIS pixels that are clustered
     alongside nearby CERES footprints. This includes downloading all MODIS L1b
@@ -62,37 +63,41 @@ def get_modis_swath(init_time:datetime, final_time:datetime, laads_token:str,
                 )
             for f in l1b_files
             ]
+    #'''
     all_data = None
-    labels = None
-    lats,lons = tuple(latlon_bbox)
-    lat0,latf = tuple(lats)
-    lon0,lonf = tuple(lons)
+    labels = [I["band"] for I in modis_data[0][1]] + geo_sunsat_labels
+    (lat0,latf),(lon0,lonf) = latlon_bbox
     for gran in modis_data:
         bands, info, geo, sunsat = gran
         tmp_data = np.dstack([*bands, *geo, *sunsat])
-        labels = [I["band"] for I in info] + geo_sunsat_labels \
-                if labels is None else labels
         in_range = np.logical_and(
                 np.logical_and(
-                    (tmp_data[:,:,labels.index("lat")] >= lat0),
-                    (tmp_data[:,:,labels.index("lat")] < latf)
+                    (tmp_data[..., labels.index("lat")] >= lat0),
+                    (tmp_data[..., labels.index("lat")] < latf)
                     ),
                 np.logical_and(
-                    (tmp_data[:,:,labels.index("lon")] >= lon0),
-                    (tmp_data[:,:,labels.index("lon")] < lonf)
+                    (tmp_data[..., labels.index("lon")] >= lon0),
+                    (tmp_data[..., labels.index("lon")] < lonf)
+                    )
+                )
+        in_range = np.logical_and(
+                in_range,
+                np.logical_and(
+                    (tmp_data[..., labels.index("sza")]<=ub_sza),
+                    (tmp_data[..., labels.index("vza")]<=ub_vza),
                     )
                 )
         tmp_data = tmp_data[in_range]
         all_data = tmp_data if all_data is None \
                 else np.concatenate((all_data,tmp_data))
-    return FG1D(labels, [all_data[:,i] for i in range(len(labels))])
+    #'''
+    return FG1D(labels, all_data)
 
 def mp_get_modis_swath(swath:dict):
     """
     downloads MODIS data in a given time range
     """
     defaults = {
-            "latlon_bbox":((-90,90),(-180,180)),
             "isaqua":False,
             "debug":False,
             }
@@ -103,8 +108,8 @@ def mp_get_modis_swath(swath:dict):
         assert all(k in args.keys() for k in mandatory_args)
         return args,get_modis_swath(**args)
     except Exception as e:
-        #raise e
-        print(e)
+        raise e
+        #print(e)
         return None
 
 
@@ -112,8 +117,8 @@ def mp_get_modis_swath(swath:dict):
 if __name__=="__main__":
     debug = True
     data_dir = Path("data")
-    modis_nc_dir = Path("/rstor/mdodson/modis_seus")
-    modis_swath_dir = data_dir.joinpath("modis")
+    modis_nc_dir = data_dir.joinpath("modis")
+    modis_swath_dir = data_dir.joinpath("modis_swaths")
 
     """
     Generate a API download  token with an EarthData account here:
@@ -125,7 +130,8 @@ if __name__=="__main__":
     token = str(data_dir.joinpath("laads-token.txt").open("r").read()).strip()
 
     swaths_pkl = data_dir.joinpath(
-            "ceres_swaths/ceres-ssf_idn_aqua_20200916-20201231.pkl")
+            #"ceres_swaths/ceres-ssf_hk_terra_20180101-20201231.pkl")
+            "ceres_swaths/ceres-ssf_hk_aqua_20180101-20201231.pkl")
 
     """  --( configuration )--  """
     modis_bands = [
@@ -142,7 +148,7 @@ if __name__=="__main__":
             ]
     ## lat,lon preset for seus
     bbox = ((28,38), (-95,-75))
-    workers = 20
+    workers = 1
     keep_netcdfs = False
     """  --( ------------- )--  """
 
@@ -159,9 +165,8 @@ if __name__=="__main__":
                    for C in ceres_swaths]
     #ceres = FG1D(ceres_labels, np.concatenate([C.data for C in ceres_swaths]))
 
-    print(time_ranges)
-    print(ceres_swaths.pop(0).labels)
-    exit(0)
+    time_ranges = [time_ranges[0]]
+    ceres_swaths = [ceres_swaths[0]]
 
     """
     Search for MODIS L1b files on the LAADS DAAC that were acquired at the same
@@ -169,19 +174,27 @@ if __name__=="__main__":
     get_ceres_swath.py
     """
     ## download modis data near the footprints
-    isaqua = "aqua" in swaths_pkl.name.lower()
-    assert isaqua or "terra" in swaths_pkl.name.lower()
+    #isaqua = "aqua" in swaths_pkl.name.lower()
+    #assert isaqua or "terra" in swaths_pkl.name.lower()
     shared_args = {
             "laads_token":token,
             "modis_nc_dir":modis_nc_dir,
+            "latlon_bbox":(
+                ceres_swaths[0].meta.get("lat_range"),
+                ceres_swaths[0].meta.get("lon_range")),
+            ## Add 1 degree for pixel buffer around outer footprints
+            "ub_vza":ceres_swaths[0].meta.get("ub_vza") + 1,
+            "ub_sza":ceres_swaths[0].meta.get("ub_sza"),
             "bands":modis_bands,
-            "latlon_bbox":bbox,
-            "isaqua":isaqua,
             "debug":debug
             }
     ## Generate time ranges for each distinct ceres swath time range
-    modis_args = [dict(shared_args, init_time=t0, final_time=tf)
-                  for t0,tf in time_ranges]
+    modis_args = [dict(
+        shared_args,
+        init_time=time_ranges[i][0],
+        final_time=time_ranges[i][1],
+        isaqua=ceres_swaths[i].meta.get("satellite") == "aqua",
+        ) for i in range(len(time_ranges))]
     with Pool(workers) as pool:
         swath_count = 0
         for p_all in pool.imap(mp_get_modis_swath, modis_args):
@@ -192,9 +205,8 @@ if __name__=="__main__":
             p_in,p_out = p_all
             ## Construct output pkl name
             tmp_file = modis_swath_dir.joinpath(
-                    ("terra","aqua")[isaqua] +
+                    "modis-swath" +
                     p_in["init_time"].strftime("_%Y%m%d-%H%M%S") +
-                    p_in["final_time"].strftime("_%Y%m%d-%H%M%S") +
                     ".pkl"
                     )
             try:

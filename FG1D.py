@@ -31,15 +31,16 @@ class FG1D:
         slope,intc,rval = (res.slope, res.intercept, res.rvalue)
         return (slope, intc, rval)
 
-    def __init__(self, labels, data:np.array):
+    def __init__(self, labels, data:np.array, meta:dict={}):
         assert len(data.shape) == 2
         assert len(labels) == len(set(labels)) == data.shape[-1]
         self._data = data
         self.labels = labels
         self.size = self._data.shape[0]
+        self.meta = meta
 
     def to_tuple(self):
-        return (self.labels, self._data)
+        return (self.labels, self._data, self.meta)
 
     def data(self, label=None):
         if label is None:
@@ -76,7 +77,7 @@ class FG1D:
         Return a FG1D object only including samples with True mask values.
         """
         assert mask.size == self.size
-        return FG1D(self.labels, self._data[mask])
+        return FG1D(self.labels, self._data[mask], meta=self.meta)
 
     #def subset(self, labels:list):
     #    return FG1D(labels, [self.data(l) for l in labels])
