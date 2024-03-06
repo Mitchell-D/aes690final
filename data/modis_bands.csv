@@ -1,4 +1,5 @@
 ## Primary Use, Band, Bandwidth, Spectral Radiance, Required SNR
+## Table acquired from https://modis.gsfc.nasa.gov/about/specifications.php
 
 # Land/Cloud/Aerosols Boundaries
 1,  620-670,   21.8, 128
