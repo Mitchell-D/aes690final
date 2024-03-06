@@ -1,24 +1,5 @@
-#import netCDF4 as nc
-import gc
 import numpy as np
-from pathlib import Path
-import pickle as pkl
-from datetime import datetime
-from datetime import timedelta
-import matplotlib.pyplot as plt
-
 from scipy.stats import linregress
-#from sklearn.linear_model import LinearRegression
-
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-
-#from krttdkit.acquire import modis
-from krttdkit.operate import enhance as enh
-#from krttdkit.products import FeatureGrid
-#from krttdkit.products import HyperGrid
-#from krttdkit.visualize import guitools as gt
-#from krttdkit.visualize import geoplot as gp
 
 class FG1D:
     @staticmethod

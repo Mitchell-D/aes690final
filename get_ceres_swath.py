@@ -228,6 +228,7 @@ if __name__=="__main__":
         ## process only one CERES order as a FG1D object.
         ceres = FG1D(*parse_ceres(cf))
 
+        ## Remove unneeded fields
         for df in drop_fields:
             ceres.drop_data(df)
 
@@ -315,14 +316,18 @@ if __name__=="__main__":
         approx_times = ceres.data("epoch")[tmask]
 
         ## Look for anything with a stime offset < (lb_swath_interval * 3)
-        all_swaths = []
+        swaths = []
         for stime in approx_times:
             smask = np.abs(ceres.data("epoch")-stime)<lb_swath_interval*3
             swath = ceres.mask(smask)
-            all_swaths.append(swath)
+            swaths.append(swath)
+
+        swaths = list(filter(lambda s:s.size>min_footprints, swaths))
+
+        ### (!!!) Only take every 2nd swath (!!!)
+        swaths = swaths[::2]
+        swaths = [s.to_tuple() for s in swaths if s.size>min_footprints]
 
         ## Keep all swaths with at least 50 footprints in range, and save as a
         ## list of 2-tuples like (labels:list[str], data:list[np.array])
-        pkl.dump([s.to_tuple() for s in all_swaths
-                  if s.size>min_footprints],
-                 swaths_pkl.open("wb"))
+        pkl.dump(swaths, swaths_pkl.open("wb"))
