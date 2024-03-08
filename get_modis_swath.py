@@ -6,17 +6,132 @@ import pickle as pkl
 from datetime import datetime
 from datetime import timedelta
 from multiprocessing import Pool
+from pyhdf.SD import SD,SDC
 
 from krttdkit.operate import enhance as enh
 from krttdkit.acquire import modis
 from krttdkit.acquire import laads
 
 from FG1D import FG1D
+import modis_rsrs
+
+def modis_band_to_wl(band:int):
+    """
+    Returns the central wavelength of the integer band in um by finding
+    the weighted mean wavelength of the spectral response.
+
+    Spectral response functions provided by:
+    https://nwp-saf.eumetsat.int/downloads/rtcoef_rttov13/ir_srf/rtcoef_eos_1_modis_srf/
+    """
+    rsr_dict = modis_rsrs.modis_rsrs[band]
+    wl = rsr_dict["wavelength"]
+    rsr = rsr_dict["rsr"]
+    mid_idx = np.argmin(np.abs(np.cumsum(np.array(rsr))-round(sum(rsr)/2)))
+    return wl[mid_idx]
+
+def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None,
+                   l1b_convert_reflectance:bool=True, l1b_convert_tb:bool=True,
+                   debug=False):
+    """
+    Opens a Terra or Aqua L1b calibrated radiances or L2 atmospherically-
+    corrected reflectance/emission granule file, and parses the
+    requested bands based on keys defined in dictionaries above.
+
+    The values returned by this method are contingent on the file type
+    provided to datafile.
+
+    For l1b files:
+    sunsat and geolocation data is bilinear-interpolated from a 5x5 subsampled
+    grid. By default reflectance bands are converted to BRDF and thermal
+    bands are left as radiances.
+
+    :@param modis_l1b_file: Path to level 1b 2 hdf4 file, probably from the
+            laads daac.
+    :@param bands: Band key defined in l2_products dictionary if datafile is
+            a l2 path, or a valid MODIS band number.
+    :return: (data, info, geo) 3-tuple. data is a list of ndarrays
+            corresponding to each requested band, info is a list of data
+            attribute dictionaries for the respective bands, and geo is a
+            2-tuple (latitude, longitude) of the 1km data grid.
+    """
+    sd = SD(modis_l1b_file.as_posix(), SDC.READ)
+    valid_bands = list(sorted(list(range(1,37)) + [13.5, 14.5]))
+    if bands is None:
+        bands = valid_bands
+    else:
+        assert all(b in valid_bands for b in bands)
+
+    record_mapping = {
+            "Band_250M":"EV_250_Aggr1km_RefSB",
+            "Band_500M":"EV_500_Aggr1km_RefSB",
+            "Band_1KM_Emissive":"EV_1KM_Emissive",
+            "Band_1KM_RefSB":"EV_1KM_RefSB",
+            }
+
+    band_keys = {k:list(sd.select(k).get()) for k in record_mapping.keys()}
+    labels = []
+    data = []
+    ctr_wls = []
+    for b in bands:
+        ctr_wls.append(modis_band_to_wl(int(b)))
+        if b == 26:
+            ## Band 26 is also in the normal 1km reflectance dataset,
+            ## but my understanding is that one doesn't have the updated
+            ## de-striping algorithm pre-applied.
+            idx = band_keys["Band_1KM_RefSB"].index(26)
+            tmp_sd = sd.select("EV_Band26")
+            tmp_attrs = tmp_sd.attributes()
+            tmp_data = tmp_sd.get()
+        for k,band_list in band_keys.items():
+            if b not in band_list:
+                continue
+            idx = band_list.index(b)
+            tmp_sd = sd.select(record_mapping[k])
+            tmp_attrs = tmp_sd.attributes()
+            labels.append(b)
+            tmp_data = tmp_sd.get()[idx]
+        if "reflectance_units" in tmp_attrs.keys() \
+                and l1b_convert_reflectance:
+            ## Should be divided by cos(sza) for true BRDF
+            tmp_data = (tmp_data-tmp_attrs["reflectance_offsets"][idx]) \
+                    * tmp_attrs["reflectance_scales"][idx]
+        elif not "reflectance_units" in tmp_attrs.keys() and l1b_convert_tb:
+            c1 = 1.191042e8 # W / (m^2 sr um^-4)
+            c2 = 1.4387752e4 # K um
+            # Get brightness temp with planck's function at the ctr wl
+            tmp_data = c2/(ctr_wls[-1]*np.log(c1/(ctr_wls[-1]**5*tmp_data)+1))
+        else:
+            tmp_data = (tmp_data-tmp_attrs["radiance_offsets"][idx]) \
+                    * tmp_attrs["radiance_scales"][idx]
+        data.append(tmp_data)
+    data = np.stack(data, axis=-1)
+    return labels,data,{"ctr_wls":ctr_wls}
+
+def get_modis_geometry(modis_geoloc_file:Path, include_masks=False,):
+    fields  = [
+            ("Latitude", "lat"),
+            ("Longitude", "lon"),
+            ("Height", "height"),
+            ("SensorZenith", "vza"),
+            ("SensorAzimuth", "vaa"),
+            ("SolarZenith", "sza"),
+            ("SolarAzimuth", "saa"),
+            ]
+    if include_masks:
+        fields += [
+                ("Land/SeaMask", "m_land"),
+                ("WaterPresent", "m_water"),
+                ]
+    sd = SD(modis_geoloc_file.as_posix(), SDC.READ)
+    records,labels = zip(*fields)
+    data = np.stack([sd.select(f).get() for f in records], axis=-1)
+    return labels,data
 
 def get_modis_swath(init_time:datetime, final_time:datetime, laads_token:str,
-                    modis_nc_dir:Path, bands:tuple, keep_rad=False,
-                    ub_vza=180, ub_sza=180, latlon_bbox=((-90,90),(-180,180)),
-                    adjsec=1200, isaqua=False, debug=False):
+                    modis_nc_dir:Path, bands:tuple, isaqua=False,
+                    keep_rad=False, keep_masks=False, ub_vza=180, ub_sza=180,
+                    latlon_bbox=((-90,90),(-180,180)), adjsec=1200,
+                    debug=False):
     """
     Kicks off process of developing datasets of MODIS pixels that are clustered
     alongside nearby CERES footprints. This includes downloading all MODIS L1b
@@ -48,18 +163,42 @@ def get_modis_swath(init_time:datetime, final_time:datetime, laads_token:str,
                 debug=debug,
                 )
             ]
-
-    assert all(f.exists() for f in l1b_files)
-    modis_data = [
-            modis.get_modis_data(
-                datafile=f,
-                bands=bands,
-                l1b_convert_reflectance=not keep_rad,
-                l1b_convert_tb=not keep_rad,
+    geoloc_files = [
+            laads.download(
+                target_url=g["downloadsLink"],
+                dest_dir=modis_nc_dir,
+                raw_token=laads_token,
                 debug=debug
                 )
-            for f in l1b_files
+            for g in modis.query_modis_l1b(
+                product_key=("MOD03","MYD03")[isaqua],
+                start_time=init_time,
+                end_time=final_time,
+                debug=debug,
+                )
             ]
+
+    assert all(f.exists() for f in l1b_files)
+    assert all(f.exists() for f in geoloc_files)
+    dlabels,data,meta = zip(*[
+        get_modis_l1b(
+            modis_l1b_file=f,
+            #bands=bands,
+            #l1b_convert_reflectance=not keep_rad,
+            #l1b_convert_tb=not keep_rad,
+            #debug=debug
+            )
+        for f in l1b_files
+        ])
+    glabels,geom = zip(*[
+            get_modis_geometry(modis_geoloc_file=f)
+            for f in geoloc_files
+            ])
+    print(dlabels)
+    print(glabels)
+    print(data[0].shape)
+    print(geom[0].shape)
+    exit(0)
 
     #'''
     all_data = None
@@ -131,8 +270,8 @@ if __name__=="__main__":
     ## Specify a pickle file generated by get_ceres_swath.py,
     ## which should contain a list of FG1D-style tuples.
     swaths_pkl = data_dir.joinpath(
-            #"ceres_swaths/ceres-ssf_hk_terra_20180101-20201231.pkl")
-            "ceres_swaths/ceres-ssf_hk_aqua_20180101-20201231.pkl")
+            #"ceres_swaths/ceres-ssf_hkh_terra_20180101-20201231.pkl")
+            "ceres_swaths/ceres-ssf_hkh_aqua_20180101-20201231.pkl")
     modis_bands = [
             8,              # .41                       Near UV
             1,4,3,          # .64,.55,.46               (R,G,B)
@@ -168,8 +307,6 @@ if __name__=="__main__":
     print(len(ceres_swaths))
     time_ranges = [time_ranges[0]]
     ceres_swaths = [ceres_swaths[0]]
-
-    print(ceres_swaths[0])
 
 
     """

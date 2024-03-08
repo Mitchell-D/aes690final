@@ -1,4 +1,9 @@
-import h5py
+#import h5py
+
+## Must use pyhdf since it's an hdf4 :(
+from pyhdf.SD import SD,SDC
+from pathlib import Path
+import numpy as np
 
 def parse_modis_time(fpath:Path):
     """
@@ -16,4 +21,14 @@ def parse_modis_time(fpath:Path):
     return dt.strptime("".join(fpath.name.split(".")[1:3]), "A%Y%j%H%M")
 
 if __name__=="__main__":
-    modis_path = Path(f"MOD03.A2020006.0120.061.2020006072240.hdf")
+    data_dir = Path("data")
+    #modis_path = data_dir.joinpath(f"modis/MYD03.A2018001.0810.061.2018002030829.hdf")
+    modis_path = data_dir.joinpath(f"modis/MYD021KM.A2018001.0810.061.2018002041512.hdf")
+
+    #f = h5py.File(modis_path.as_posix(), mode="r")
+    sd = SD(modis_path.as_posix(), SDC.READ)
+    print(sd.datasets().keys())
+    print(sd.select("Band_250M").get())
+    print(sd.select("Band_500M").get())
+    print(sd.select("Band_1KM_RefSB").get())
+    print(sd.select("Band_1KM_Emissive").get())
