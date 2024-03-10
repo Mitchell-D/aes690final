@@ -1,3 +1,4 @@
+import json
 import numpy as np
 from scipy.stats import linregress
 
@@ -22,6 +23,14 @@ class FG1D:
 
     def to_tuple(self):
         return (self.labels, self._data, self.meta)
+
+    def to_json(self):
+        """
+        Convert the serializable labels and meta dict of this FG1D to a
+        JSON-formatted string. This can be used to re-initialize it alongside
+        a separately-loaded data array
+        """
+        return json.dumps({"labels":self.labels, "meta":self.meta})
 
     def data(self, label=None):
         if label is None:

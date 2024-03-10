@@ -6,13 +6,18 @@ import pickle as pkl
 from datetime import datetime
 from datetime import timedelta
 from multiprocessing import Pool
+from collections import ChainMap
+
+## Need to use pyhdf for hdf4 and h5py for hdf5 :(
 from pyhdf.SD import SD,SDC
+import h5py
 
 from krttdkit.operate import enhance as enh
 from krttdkit.acquire import modis
 from krttdkit.acquire import laads
 
 from FG1D import FG1D
+from FeatureGridV2 import FeatureGridV2 as FG
 import modis_rsrs
 
 def modis_band_to_wl(band:int):
@@ -29,7 +34,7 @@ def modis_band_to_wl(band:int):
     mid_idx = np.argmin(np.abs(np.cumsum(np.array(rsr))-round(sum(rsr)/2)))
     return wl[mid_idx]
 
-def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None,
+def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
                    l1b_convert_reflectance:bool=True, l1b_convert_tb:bool=True,
                    debug=False):
     """
@@ -73,37 +78,46 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None,
     data = []
     ctr_wls = []
     for b in bands:
-        ctr_wls.append(modis_band_to_wl(int(b)))
         if b == 26:
             ## Band 26 is also in the normal 1km reflectance dataset,
             ## but my understanding is that one doesn't have the updated
             ## de-striping algorithm pre-applied.
-            idx = band_keys["Band_1KM_RefSB"].index(26)
+            idx = 0 #band_keys["Band_1KM_RefSB"].index(26)
             tmp_sd = sd.select("EV_Band26")
-            tmp_attrs = tmp_sd.attributes()
-            tmp_data = tmp_sd.get()
-        for k,band_list in band_keys.items():
-            if b not in band_list:
-                continue
-            idx = band_list.index(b)
-            tmp_sd = sd.select(record_mapping[k])
-            tmp_attrs = tmp_sd.attributes()
-            labels.append(b)
-            tmp_data = tmp_sd.get()[idx]
+            keys = ["reflectance_offsets", "reflectance_scales",
+                    "radiance_offsets", "radiance_scales",
+                    "reflectance_units"]
+            tmp_attrs = {k:[tmp_sd.attributes()[k]] for k in keys}
+            raw_data = tmp_sd.get()
+        else:
+            for k,band_list in band_keys.items():
+                if b not in band_list:
+                    continue
+                idx = band_list.index(b)
+                tmp_sd = sd.select(record_mapping[k])
+                tmp_attrs = tmp_sd.attributes()
+                raw_data = tmp_sd.get()[idx]
+                break
         if "reflectance_units" in tmp_attrs.keys() \
                 and l1b_convert_reflectance:
             ## Should be divided by cos(sza) for true BRDF
-            tmp_data = (tmp_data-tmp_attrs["reflectance_offsets"][idx]) \
+            #print(tmp_attrs["reflectance_offsets"])
+            #print(b)
+            tmp_data = (raw_data-tmp_attrs["reflectance_offsets"][idx]) \
                     * tmp_attrs["reflectance_scales"][idx]
         elif not "reflectance_units" in tmp_attrs.keys() and l1b_convert_tb:
             c1 = 1.191042e8 # W / (m^2 sr um^-4)
             c2 = 1.4387752e4 # K um
             # Get brightness temp with planck's function at the ctr wl
-            tmp_data = c2/(ctr_wls[-1]*np.log(c1/(ctr_wls[-1]**5*tmp_data)+1))
-        else:
-            tmp_data = (tmp_data-tmp_attrs["radiance_offsets"][idx]) \
-                    * tmp_attrs["radiance_scales"][idx]
+            tmp_data = c2/(ctr_wls[-1]*np.log(c1/(ctr_wls[-1]**5*raw_data)+1))
+        labels.append(b)
         data.append(tmp_data)
+        ctr_wls.append(modis_band_to_wl(int(b)))
+        if keep_rad:
+            tmp_data = (raw_data-tmp_attrs["radiance_offsets"][idx]) \
+                    * tmp_attrs["radiance_scales"][idx]
+            labels.append(f"{b}-rad")
+            data.append(tmp_data)
     data = np.stack(data, axis=-1)
     return labels,data,{"ctr_wls":ctr_wls}
 
@@ -127,10 +141,11 @@ def get_modis_geometry(modis_geoloc_file:Path, include_masks=False,):
     data = np.stack([sd.select(f).get() for f in records], axis=-1)
     return labels,data
 
-def get_modis_swath(init_time:datetime, final_time:datetime, laads_token:str,
-                    modis_nc_dir:Path, bands:tuple, isaqua=False,
-                    keep_rad=False, keep_masks=False, ub_vza=180, ub_sza=180,
-                    latlon_bbox=((-90,90),(-180,180)), adjsec=1200,
+def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
+                    swath_h5_dir:Path, region_label:str,
+                    lat_buffer:float=0., lon_buffer:float=0.,
+                    bands:tuple=None, isaqua=False, keep_rad=False,
+                    keep_masks=False, spatial_chunks:tuple=(64,64),
                     debug=False):
     """
     Kicks off process of developing datasets of MODIS pixels that are clustered
@@ -143,12 +158,24 @@ def get_modis_swath(init_time:datetime, final_time:datetime, laads_token:str,
     2. Parses out the requested bands within the latlon range
     3. returns a FG1D object with all in-range pixels.
 
-    :@param adjsec: "adjecency seconds", or the time window in seconds within
-        which times are assumed to be part of the swath. This is a sanity check
-        threshold making sure files from different overpasses don't download.
     """
     geo_sunsat_labels = ["lat", "lon", "height", "sza", "saa", "vza", "vaa"]
     #t0,tf = init_time.timestamp(), final_time.timestamp()
+
+    init_time = datetime.fromtimestamp(np.min(ceres_swath.data("epoch")))
+    final_time = datetime.fromtimestamp(np.max(ceres_swath.data("epoch")))
+    avg_time = datetime.fromtimestamp(np.average(ceres_swath.data("epoch")))
+
+    ## Extract a grid that is slightly larger than the footprint bounds.
+    latlon_bbox=(
+            (np.amin(ceres_swath.data("lat"))-lat_buffer,
+             np.amax(ceres_swath.data("lat"))+lat_buffer),
+            (np.amin(ceres_swath.data("lon"))-lat_buffer,
+             np.amax(ceres_swath.data("lon"))+lat_buffer),
+            )
+    ## Add 2 degrees for pixel buffer around outer footprints
+    ## viewing zenith should be the limiting factor for the MODIS grid.
+    isaqua = ceres_swath.meta.get("satellite") == "aqua"
     l1b_files = [
             laads.download(
                 target_url=g["downloadsLink"],
@@ -180,67 +207,90 @@ def get_modis_swath(init_time:datetime, final_time:datetime, laads_token:str,
 
     assert all(f.exists() for f in l1b_files)
     assert all(f.exists() for f in geoloc_files)
+
     dlabels,data,meta = zip(*[
         get_modis_l1b(
             modis_l1b_file=f,
-            #bands=bands,
-            #l1b_convert_reflectance=not keep_rad,
-            #l1b_convert_tb=not keep_rad,
-            #debug=debug
+            bands=bands,
+            keep_rad=keep_rad,
+            debug=debug,
             )
         for f in l1b_files
         ])
+
     glabels,geom = zip(*[
-            get_modis_geometry(modis_geoloc_file=f)
+            get_modis_geometry(
+                modis_geoloc_file=f,
+                include_masks=keep_masks,
+                )
             for f in geoloc_files
             ])
-    print(dlabels)
-    print(glabels)
-    print(data[0].shape)
-    print(geom[0].shape)
-    exit(0)
 
-    #'''
-    all_data = None
-    labels = [I["band"] for I in modis_data[0][1]] + geo_sunsat_labels
-    (lat0,latf),(lon0,lonf) = latlon_bbox
-    for gran in modis_data:
-        bands, info, geo, sunsat = gran
-        tmp_data = np.dstack([*bands, *geo, *sunsat])
-        in_range = np.logical_and(
-                np.logical_and(
-                    (tmp_data[..., labels.index("lat")] >= lat0),
-                    (tmp_data[..., labels.index("lat")] < latf)
-                    ),
-                np.logical_and(
-                    (tmp_data[..., labels.index("lon")] >= lon0),
-                    (tmp_data[..., labels.index("lon")] < lonf)
-                    )
-                )
-        in_range = np.logical_and(
-                in_range,
-                np.logical_and(
-                    (tmp_data[..., labels.index("sza")]<=ub_sza),
-                    (tmp_data[..., labels.index("vza")]<=ub_vza),
-                    )
-                )
-        tmp_data = tmp_data[in_range]
-        all_data = tmp_data if all_data is None \
-                else np.concatenate((all_data,tmp_data))
-    #'''
-    return FG1D(labels, all_data)
+    ## Zonally concatenate overpasses so that North is up.
+    ## Terra is descending during the day, and aqua is ascending.
+    data = np.concatenate(data[::(-1,1)[isaqua]], axis=0)
+    geom = np.concatenate(geom[::(-1,1)[isaqua]], axis=0)
+    ## Concatenate data and geometric features along the feature axis
+    data = np.concatenate((data,geom), axis=-1)
+
+    ## Since aqua is ascending during the day, its scan is inverted.
+    if isaqua:
+        data = data[::-1,::-1]
+
+    modis_fg = FG(
+            clabels=("y","x"),
+            flabels=list(dlabels[0])+list(glabels[0]),
+            data=data,
+            meta=dict(ChainMap(*meta)),
+            )
+
+    m_lat = (modis_fg.data("lat") >= latlon_bbox[0][0]) \
+            & (modis_fg.data("lat") < latlon_bbox[0][1])
+    m_lon = (modis_fg.data("lon") >= latlon_bbox[1][0]) \
+            & (modis_fg.data("lon") < latlon_bbox[1][1])
+
+    r_lat = np.squeeze(np.array(np.where(np.any((m_lat & m_lon), axis=1))))
+    r_lon = np.squeeze(np.array(np.where(np.any((m_lat & m_lon), axis=0))))
+    r_lat = np.amin(r_lat), np.amax(r_lat)
+    r_lon = np.amin(r_lon), np.amax(r_lon)
+
+    print(f"before",modis_fg.shape)
+    modis_fg = modis_fg.subgrid(y=r_lat, x=r_lon)
+    print(f"after",modis_fg.shape)
+
+    timestr = avg_time.strftime(f"%Y%m%d-%H%M")
+    ## Open file for writing with 128MB buffer
+    sat = ceres_swath.meta.get("satellite")
+    h5_path = swath_h5_dir.joinpath(
+            f"swath_{region_label}_{timestr}_{sat}.h5")
+    f_swath = h5py.File(h5_path, "w-", rdcc_nbytes=128*1024**2)
+    g_swath = f_swath.create_group("/data")
+    g_swath.attrs["modis"] = modis_fg.to_json()
+    g_swath.attrs["ceres"] = ceres_swath.to_json()
+    ## Not worth chunking ceres datasets, which shouldn't be enormous
+    d_ceres = g_swath.create_dataset(
+            name="ceres",
+            shape=ceres_swath.data().shape,
+            compression="gzip"
+            )
+    d_modis = g_swath.create_dataset(
+            name="modis",
+            shape=modis_fg.shape,
+            chunks=(*spatial_chunks,modis_fg.shape[-1]),
+            compression="gzip",
+            )
+    d_ceres[...] = ceres_swath.data()
+    d_modis[...] = modis_fg.data()
+    f_swath.close()
+    return h5_path
 
 def mp_get_modis_swath(swath:dict):
     """
     downloads MODIS data in a given time range
     """
-    defaults = {
-            "isaqua":False,
-            "debug":False,
-            }
+    defaults = {"debug":False}
     args = dict(defaults, **swath)
-    mandatory_args = ("init_time","final_time","laads_token",
-                      "modis_nc_dir", "bands")
+    mandatory_args = ("ceres_swath","laads_token", "modis_nc_dir")
     try:
         assert all(k in args.keys() for k in mandatory_args)
         return args,get_modis_swath(**args)
@@ -252,7 +302,7 @@ def mp_get_modis_swath(swath:dict):
 
 
 if __name__=="__main__":
-    debug = True
+    debug = False
     data_dir = Path("data")
     modis_nc_dir = data_dir.joinpath("modis")
     modis_swath_dir = data_dir.joinpath("modis_swaths")
@@ -269,9 +319,13 @@ if __name__=="__main__":
     """  --( configuration )--  """
     ## Specify a pickle file generated by get_ceres_swath.py,
     ## which should contain a list of FG1D-style tuples.
-    swaths_pkl = data_dir.joinpath(
-            #"ceres_swaths/ceres-ssf_hkh_terra_20180101-20201231.pkl")
-            "ceres_swaths/ceres-ssf_hkh_aqua_20180101-20201231.pkl")
+    #swaths_pkl = data_dir.joinpath(
+    swaths_pkls = [
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_hkh_terra_20180101-20201231.pkl"),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_hkh_aqua_20180101-20201231.pkl"),
+            ]
     modis_bands = [
             8,              # .41                       Near UV
             1,4,3,          # .64,.55,.46               (R,G,B)
@@ -286,7 +340,7 @@ if __name__=="__main__":
             ]
     ## lat,lon preset for seus
     #bbox = ((28,38), (-95,-75))
-    workers = 1
+    workers = 6
     keep_netcdfs = False
     """  --( ------------- )--  """
 
@@ -294,20 +348,17 @@ if __name__=="__main__":
     Use the epoch time bounds from a CERES swath to set limits
     on the acquisition times of MODIS granules.
     """
-    ceres_swaths = [FG1D(*s) for s in pkl.load(swaths_pkl.open("rb"))]
-    ceres_labels = ceres_swaths[0].labels
-    assert all(set(C.labels)==set(ceres_labels) for C in ceres_swaths)
+    ceres_swaths = []
+    for p in swaths_pkls:
+        ceres_swaths += [FG1D(*s) for s in pkl.load(p.open("rb"))[-5:]]
+    #ceres_labels = ceres_swaths[0].labels
+    #assert all(set(C.labels)==set(ceres_labels) for C in ceres_swaths)
 
     ## Get the time ranges from the individual footprint epoch times
-    time_ranges = [(datetime.fromtimestamp(np.min(C.data("epoch"))),
-                    datetime.fromtimestamp(np.max(C.data("epoch"))))
-                   for C in ceres_swaths]
-    #ceres = FG1D(ceres_labels, np.concatenate([C.data for C in ceres_swaths]))
-
-    print(len(ceres_swaths))
-    time_ranges = [time_ranges[0]]
-    ceres_swaths = [ceres_swaths[0]]
-
+    #time_ranges = [(datetime.fromtimestamp(np.min(C.data("epoch"))),
+    #                datetime.fromtimestamp(np.max(C.data("epoch"))))
+    #               for C in ceres_swaths]
+    ceres_swaths = ceres_swaths[:15]
 
     """
     Search for MODIS L1b files on the LAADS DAAC that were acquired at the same
@@ -317,50 +368,29 @@ if __name__=="__main__":
     ## download modis data near the footprints
     shared_args = {
             "laads_token":token,
+            ## Directory where MODIS netCDF files are deposited
             "modis_nc_dir":modis_nc_dir,
-            "bands":modis_bands,
+            "swath_h5_dir":modis_swath_dir,
+            ## MODIS bands to extract. None for all bands.
+            "bands":None,
+            ## Extract the MODIS grid out to a couple degrees latitude and
+            ## longitude outside the minimum and maximum footprint centroid
+            ## boundaries. This is needed in order to extract grids around
+            ## outer centroids.
+            "lat_buffer":2,
+            "lon_buffer":2,
+            ## Size of hdf5 chunks in the first 2 dimensions of the hdf5
+            "spatial_chunks":(64,64),
             "debug":debug
-
-            ## Parse the following from swaths in multiprocessed method
-            #"latlon_bbox":(
-            #    ceres_swaths[0].meta.get("lat_range"),
-            #    ceres_swaths[0].meta.get("lon_range")),
-            ## Add 4 degrees for pixel buffer around outer footprints
-            ## viewing zenith should be the limiting factor for the MODIS grid.
-            #"ub_vza":ceres_swaths[0].meta.get("ub_vza") + 4,
-            #"ub_sza":ceres_swaths[0].meta.get("ub_sza"),
             }
 
-    ## Generate time ranges for each distinct ceres swath time range
-    modis_args = [dict(
-        shared_args,
-        init_time=time_ranges[i][0],
-        final_time=time_ranges[i][1],
-        isaqua=ceres_swaths[i].meta.get("satellite") == "aqua",
-        ) for i in range(len(time_ranges))]
 
-    ##
+    ## Generate time ranges for each distinct ceres swath time range
+    modis_args = [
+            dict(shared_args, ceres_swath=s, region_label=s.meta.get("region"))
+            for s in ceres_swaths
+            ]
     with Pool(workers) as pool:
         swath_count = 0
-        for p_all in pool.imap(mp_get_modis_swath, modis_args):
-            trange = time_ranges[swath_count]
-            ceres = ceres_swaths[swath_count]
-            if p_all is None:
-                continue
-            p_in,p_out = p_all
-            ## Construct output pkl name
-            tmp_file = modis_swath_dir.joinpath(
-                    "modis-swath" +
-                    p_in["init_time"].strftime("_%Y%m%d-%H%M%S") +
-                    ".pkl"
-                    )
-            try:
-                ## Store both the 1D CERES and the 1D MODIS data in the pkl.
-                assert not tmp_file.exists()
-                pkl.dump((p_out.to_tuple(), ceres.to_tuple()),
-                         tmp_file.open("wb"))
-            except Exception as e:
-                #raise e
-                print(e)
-            finally:
-                swath_count += 1
+        for args,f in pool.map(mp_get_modis_swath, modis_args):
+            print(f"Generated swath file: {f.as_posix()}")

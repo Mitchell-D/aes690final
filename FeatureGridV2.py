@@ -11,6 +11,7 @@ import pickle as pkl
 from copy import deepcopy
 import numpy as np
 import json
+from pprint import pprint as ppt
 
 #from krttdkit.visualize import guitools as gt
 #from krttdkit.visualize import geoplot as gp
@@ -44,14 +45,14 @@ class FeatureGridV2:
         return FeatureGrid(clabels=clabels, flabels=flabels, data=data,
                            coords=coords, meta=meta, masks=masks)
 
-    def __init__(self, coord_labels:list, feature_labels:list, data:np.array,
+    def __init__(self, clabels:list, flabels:list, data=None,
                  coords:dict={}, meta:dict={}, masks:dict={}):
         """
         Initialize a FeatureGrid minimally with fully labeled axes.
 
-        :@param coord_labels: List of C=D-1 unique strings naming all but the
+        :@param clabels: List of C=D-1 unique strings naming all but the
             last dimension of the D-dimensional data array.
-        :@param feature_labels: List of F unique strings naming each of the
+        :@param flabels: List of F unique strings naming each of the
             members in the final ('feature') dimension of the data array.
         :@param data: D-dimensional data array-like object with C 'coordinate'
             dimensions described by 1D monotonic coordinate axes, and 1
@@ -65,40 +66,50 @@ class FeatureGridV2:
         """
         ## The labels always correspond to the final "feature" axis of the
         ## input array-like object
-        self._clabels = coord_labels
-        self._flabels = feature_labels
-        try:
-            assert len(self._clabels) == len(data.shape)-1
-            assert len(self._flabels) == data.shape[-1]
-        except:
+        self._clabels = clabels
+        if not len(clabels) == len(data.shape)-1:
             raise ValueError(
-                    f"For a D-dimensional data array, clabels must label "
-                    "the first D-1 dimensions, and flabels must correspond to "
-                    "the members of the last dimension in the data array."
-                    )
-        try:
-            assert len(set(*self._clabels, *self._flabels)) \
-                    == len(self._flabels) + len(self._clabels)
-        except:
+                    "Coordinate labels must be provided for each dimension"
+                    f"except the last. Got {len(clabels)} coordinate "
+                    f"labels for a shape {data.shape} array.")
+        if not len(flabels) == data.shape[-1]:
             raise ValueError(
-                    f"Coordinate and feature labels must be mutually unique!"
+                    "Feature labels must be provided for each element of the "
+                    f"final dimension. Got {len(flabels)} feature "
+                    f"labels for a shape {data.shape} array.")
+        if not len(set(clabels).union(set(flabels))) \
+                == len(flabels) + len(clabels):
+            all_labels = list(clabels)+list(flabels)
+            counts = dict((k, all_labels.count(k)) for k in set(all_labels))
+            duplicates = dict(filter(lambda t:t[1]>1, counts.items()))
+            raise ValueError(
+                    "Coordinate and feature labels must be mutually unique!\n"
+                    f"Duplicates: {duplicates}"
                     )
 
-        self._data = data
+        #self._data = data
         ## coord labels default to integer index arrays
-        self._coords = [np.arange(c) for c in self._data.shape[:-1]] \
-                if coords is None else coords
+        if coords is None:
+            self._coords = {
+                    cl:np.arange(c) for cl,c in zip(clabels,data.shape[:-1])
+                    }
+        else:
+            for k,v in coords.items():
+                assert k in self._clabels
+                assert len(v) == data.shape[self._clabels.index(k)]
+            self._coords = coords
 
         # Freely-accessible meta-data dictionary. 'shape' is set by default.
-        self._meta = meta_info
-        # The shape parameter is set dynamically at __init__. If the meta
-        # dictionary contains a shape from a previous iteration, get rid of it.
-        self._meta["shape"] = None
-        self._recipes = {}
-        self._shape = None
+        self._meta = meta
+        #self._recipes = {}
+        self._clabels = clabels
+        ## flabels are set by add_feature
+        self._flabels = []
+        self._data = None
+        self._masks = {}
 
-        for i in range(len(labels)):
-            self.add_data(labels[i], data[i], info[i])
+        for i in range(len(flabels)):
+            self.add_feature(flabels[i], data[...,i])
 
     def __repr__(self, indent=2):
         """ Print the meta-json """
@@ -122,19 +133,62 @@ class FeatureGridV2:
 
     @property
     def shape(self):
-        return self._shape
+        if self._data is None:
+            return None
+        return self._data.shape
 
     ''' (!!!) unfinished transition (!!!) '''
     #def data(self, label:str=None, mask:np.ndarray=None, mask_value=0):
     def data(self, flabel:str=None, mlabel:str=None, **kwargs):
         """
         Return a FeatureGrid with the requested constraints
+
+        Need to do coordinate kwargs and masking still
         """
 
-        ##
-        #for tranfunc in [transforms[s] for s in tran[::-1]]:
-        #    X = tranfunc(X)
-        return X
+        ## Parse coordinate index ranges provided as keyword arguments
+        slices = []
+        if kwargs:
+            for cl in self._clabels:
+                ## Default to full range
+                if cl not in kwargs.keys():
+                    slices.append(slice(None))
+                ## Index a single value
+                elif type(kwargs[cl]) == int:
+                    slices.append(slice(kwargs[cl],kwargs[cl]+1))
+                ## Index a range of values
+                elif type(kwargs[cl]) == tuple:
+                    slices.append(slice(*kwargs[cl]))
+
+        if not mlabel is None:
+            print(f"WARNING masking not yet implemented")
+        if flabel is None:
+            return self._data[*slices]
+        elif hasattr(flabel, "__iter__") and not type(flabel)==str:
+            fidx = tuple(self._flabels.index(fl) for fl in flabel)
+            return self._data[*slices,fidx]
+        assert flabel in self._flabels
+        return self._data[*slices, ..., self._flabels.index(flabel)]
+
+    def subgrid(self, flabels:list=None, **kwargs):
+        """
+        Given array slices corresponding to the horizontal and vertical axes
+        of this FeatureGrid, returns a new FeatureGrid with subsetted arrays
+        and subsetted labels if a labels array is provided.
+
+        :@param flabels: Ordered labels of arrays included in the subgrid
+        :@param vrange: Vertical range in pixel index coordinates
+        :@param hrange: Horizontal range in pixel index coordinates
+        """
+        if flabels is None:
+            flabels = self._flabels
+        return FeatureGridV2(
+                clabels=self._clabels,
+                flabels=flabels,
+                data=self.data(flabel=flabels, **kwargs),
+                coords=self._coords,
+                meta=self._meta,
+                )
 
     def coords(self, clabel=None):
         """
@@ -170,11 +224,12 @@ class FeatureGridV2:
         All the information needed to recover the FeatureGrid given an
         appropriately-shaped data array (excluding boolean masks).
         """
-        return {"clabels":self._clabels,
+        d = {"clabels":self._clabels,
                 "flabels":self._flabels,
-                "coords":self.coords(),
-                "meta":self.meta(),
+                "coords":self._coords,
+                "meta":self._meta,
                 }
+        return(d)
     def to_tuple(self):
         """ """
         return (
@@ -205,6 +260,57 @@ class FeatureGridV2:
         """
         return json.dumps(self.to_dict(), indent=indent)
 
+    def add_feature(self, flabel:str, data:np.ndarray,
+                    extract_mask:bool=False):
+        """
+        Add a new data field to the FeatureGrid with an equally-shaped ndarray
+        and a unique label. If this FeatureGrid has no data, this method will
+        set the object's immutable shape attribute.
+
+        :@param flabel: Unique feature label to identify the data in this
+            addition to the final axis.
+        :@param data: numpy array with identical shape to this FeatureGrid,
+            except the feature dimension.
+        :@param extract_mask: if True and if the provided data is a
+            MaskedArray, the mask will be extracted and stored
+            (NOT YET IMPLEMENTED)
+        :@return: None
+        """
+        if type(data) == np.ma.core.MaskedArray:
+            if extract_mask:
+                print(f"WARNING: Mask extraction not currently supported")
+                '''
+                # Add the mask as a new feature array
+                mask = np.ma.getmask(data).astype(bool)
+                if np.any(mask):
+                    self.add_data(flabel+"_mask", mask.astype(bool),
+                                  {"name":"Boolean mask for "+flabel},
+                                  extract_mask=False)
+                '''
+            # get rid of the mask
+            data = np.asarray(data.data)
+        if self.shape is None:
+            self._flabels.append(flabel)
+            self._data = data[...,None]
+            return None
+
+        ## Make sure the data array's shape matches this grid's feature shape,
+        ## ie the shape of the array excluding its feature dimension.
+        if self.shape[:-1] != data.shape:
+            raise ValueError(
+                f"Cannot add {flabel} feature with shape {data.shape}. Data"
+                f" must match this FeatureGrid's shape: {self.shape}")
+
+        # Make sure the new label is unique and valid
+        if flabel in self._flabels:
+            raise ValueError(
+                    f"A feature with flabel {flabel} has already been added.")
+
+        self._flabels.append(flabel)
+        self._data = np.concatenate((self._data, data[...,None]), axis=-1)
+        return None
+
+
 ## replace with drop_axis
 '''
     def drop_data(self, label:str):
@@ -220,27 +326,6 @@ class FeatureGridV2:
 
 ## Should be data() but returning a FeatureGrid
 '''
-    def subgrid(self, labels:list=None, vrange:tuple=None, hrange:tuple=None):
-        """
-        Given array slices corresponding to the horizontal and vertical axes
-        of this FeatureGrid, returns a new FeatureGrid with subsetted arrays
-        and subsetted labels if a labels array is provided.
-
-        :@param labels: Ordered labels of arrays included in the subgrid
-        :@param vrange: Vertical range in pixel index coordinates
-        :@param hrange: Horizontal range in pixel index coordinates
-        """
-        vslice = slice(None) if vrange is None else slice(*vrange)
-        hslice = slice(None) if hrange is None else slice(*hrange)
-        labels = self.labels if labels is None else labels
-        fg = FeatureGrid(
-                labels=labels,
-                data=[self.data(l)[vslice,hslice] for l in labels],
-                info=[self.info(l) for l in labels],
-                meta=self.meta
-                )
-        fg._recipes.update(self._recipes)
-        return fg
 '''
 
 '''
@@ -296,55 +381,8 @@ class FeatureGridV2:
 
 ## Rewrite as a general concatenate method where an appropriate dimensional
 ## feature/coordinate arrays are provided.
-'''
-    def add_data(self, label:str, data:np.ndarray, info:dict=None,
-                 extract_mask:bool=True):
-        """
-        Add a new data field to the FeatureGrid with an equally-shaped ndarray
-        and a unique label. If this FeatureGrid has no data, this method will
-        set the object's immutable shape attribute.
-
-        :@param label: Unique label to identify the data array
-        :@param data: 2d numpy array with identical shape to this FeatureGrid
-        :@param info: Optional dictionary of attributes corresponding to this
-            dataset, which can be useful for storing information for
-            downstream applications.
-        :@param extract_mask: if True and if the provided data is a
-            MaskedArray, the mask will be
-
-        :@return: None
-        """
-        label = str(label)
-        if self._shape is None:
-            assert len(data.shape)==2
-            self._shape = data.shape
-            self._meta["shape"] = self._shape
-        # Make sure the data array's shape matches this grid's
-        elif self._shape != data.shape:
-            raise ValueError(
-                    f"Cannot add {label} array with shape {data.shape}. Data"
-                    f" must match this FeatureGrid's shape: {self._shape}")
-
-        # Make sure the new label is unique and valid
-        if self._label_exists(label):
-            raise ValueError(f"A feature with label {label} is already added.")
-
-        if type(data) == np.ma.core.MaskedArray:
-            if extract_mask:
-                # Add the mask as a new feature array
-                mask = np.ma.getmask(data).astype(bool)
-                if np.any(mask):
-                    self.add_data(label+"_mask", mask.astype(bool),
-                                  {"name":"Boolean mask for "+label},
-                                  extract_mask=False)
-            # get rid of the mask
-            data = np.asarray(data.data)
-        self._labels.append(label)
-        self._data.append(data)
-        self._info.append(dict(info) if info else {})
-        return self
-
-'''
+#'''
+#'''
 
 ''' documentation relevant to suspended methods below '''
 """

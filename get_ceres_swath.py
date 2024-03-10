@@ -311,7 +311,11 @@ if __name__=="__main__":
     ## The easiest way to convert from julian is wrt a specific reference day.
 
     ## netCDF from https://ceres-tool.larc.nasa.gov/ord-tool/
-    ceres_files = [f for f in ceres_nc_dir.iterdir() if f.suffix == ".nc"]
+    region_label = "azn"
+    region_files = [
+            f for f in ceres_nc_dir.iterdir()
+            if (f.suffix == ".nc" and region_label in f.stem)
+            ]
 
     ## Minimum number of valid footprints that warrant storing a swath
     min_footprints = 50
@@ -325,9 +329,8 @@ if __name__=="__main__":
     5. Calculate viewing geometry and add the new info to the dataset.
     6. Split all footprints into overpasses based on their acquisition time.
     """
-    #for cf in ceres_files:
 
-    for ceres_file in ceres_files:
+    for ceres_file in region_files:
         swaths_pkl = swath_pkl_dir.joinpath(f"{ceres_file.stem}.pkl")
         swaths = get_ceres_swaths(
                 ceres_nc_file=ceres_file,
@@ -343,6 +346,9 @@ if __name__=="__main__":
         swaths = list(filter(lambda s:s.size>min_footprints, swaths))
         ### (!!!) Only take every 2nd swath (!!!)
         swaths = swaths[::2]
+        ## Add the region key to all the meta dicts
+        for s in swaths:
+            s.meta.update(region=region_label)
 
         print(f"Data source:      {ceres_file.name}")
         print(f"Swaths acquired:  {len(swaths)}")
