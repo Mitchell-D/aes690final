@@ -2,7 +2,7 @@
 
 Take 2 on disaggregating CERES footprints to MODIS resolution.
 
-![MODIS Mosaic]("https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/modis-quilt_4.png?raw=true")
+![MODIS Mosaic]("https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/modis-quilt_4.png")
 
 <p align="center">
     MODIS tile mosaic, including Hindu Kush Himilayan region, North East US, Amazon Rainforest, and Indonesia.
