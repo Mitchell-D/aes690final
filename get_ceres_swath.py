@@ -311,7 +311,7 @@ if __name__=="__main__":
     ## The easiest way to convert from julian is wrt a specific reference day.
 
     ## netCDF from https://ceres-tool.larc.nasa.gov/ord-tool/
-    region_label = "azn"
+    region_label = "idn"
     region_files = [
             f for f in ceres_nc_dir.iterdir()
             if (f.suffix == ".nc" and region_label in f.stem)

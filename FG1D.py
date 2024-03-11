@@ -21,6 +21,13 @@ class FG1D:
         self.size = self._data.shape[0]
         self.meta = meta
 
+    @property
+    def shape(self):
+        return (self.size, len(self.labels))
+
+    def __repr__(self):
+        return f"FG1D\nlabels: {self.labels}\nshape: {self.shape}"
+
     def to_tuple(self):
         return (self.labels, self._data, self.meta)
 
@@ -35,7 +42,11 @@ class FG1D:
     def data(self, label=None):
         if label is None:
             return np.copy(self._data)
-        return self._data[...,self.labels.index(label)]
+        if hasattr(label, "__iter__") and not type(label)==str:
+            idx = tuple(self.labels.index(s) for s in label)
+        else:
+            idx = self.labels.index(label)
+        return self._data[...,idx]
 
     def add_data(self, label, data):
         """

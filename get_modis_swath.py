@@ -1,5 +1,6 @@
 """  """
 #import gc
+import random
 import numpy as np
 from pathlib import Path
 import pickle as pkl
@@ -146,7 +147,7 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
                     lat_buffer:float=0., lon_buffer:float=0.,
                     bands:tuple=None, isaqua=False, keep_rad=False,
                     keep_masks=False, spatial_chunks:tuple=(64,64),
-                    debug=False):
+                    buf_size_mb=128, debug=False):
     """
     Kicks off process of developing datasets of MODIS pixels that are clustered
     alongside nearby CERES footprints. This includes downloading all MODIS L1b
@@ -254,16 +255,18 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
     r_lat = np.amin(r_lat), np.amax(r_lat)
     r_lon = np.amin(r_lon), np.amax(r_lon)
 
-    print(f"before",modis_fg.shape)
+    if debug:
+        print(f"before",modis_fg.shape)
     modis_fg = modis_fg.subgrid(y=r_lat, x=r_lon)
-    print(f"after",modis_fg.shape)
+    if debug:
+        print(f"after",modis_fg.shape)
 
     timestr = avg_time.strftime(f"%Y%m%d-%H%M")
     ## Open file for writing with 128MB buffer
     sat = ceres_swath.meta.get("satellite")
     h5_path = swath_h5_dir.joinpath(
-            f"swath_{region_label}_{timestr}_{sat}.h5")
-    f_swath = h5py.File(h5_path, "w-", rdcc_nbytes=128*1024**2)
+            f"swath_{region_label}_{sat}_{timestr}.h5")
+    f_swath = h5py.File(h5_path, "w-", rdcc_nbytes=buf_size_mb*1024**2)
     g_swath = f_swath.create_group("/data")
     g_swath.attrs["modis"] = modis_fg.to_json()
     g_swath.attrs["ceres"] = ceres_swath.to_json()
@@ -322,10 +325,37 @@ if __name__=="__main__":
     #swaths_pkl = data_dir.joinpath(
     swaths_pkls = [
             data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_idn_aqua_20180101-20200916.pkl"
+                ),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_idn_aqua_20200916-20201231.pkl"
+                ),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_idn_terra_20180101-20200815.pkl"
+                ),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_idn_terra_20200816-20201231.pkl"
+                ),
+            ]
+    '''
+            data_dir.joinpath(
                 "ceres_swaths/ceres-ssf_hkh_terra_20180101-20201231.pkl"),
             data_dir.joinpath(
                 "ceres_swaths/ceres-ssf_hkh_aqua_20180101-20201231.pkl"),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_azn_terra_20180101-20201231.pkl"),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_azn_aqua_20180101-20201231.pkl"),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_neus_terra_20180101-20201112.pkl"),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_neus_terra_20201112-20201231.pkl"),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129.pkl"),
+            data_dir.joinpath(
+                "ceres_swaths/ceres-ssf_neus_aqua_20201129-20201231.pkl"),
             ]
+    '''
     modis_bands = [
             8,              # .41                       Near UV
             1,4,3,          # .64,.55,.46               (R,G,B)
@@ -340,7 +370,7 @@ if __name__=="__main__":
             ]
     ## lat,lon preset for seus
     #bbox = ((28,38), (-95,-75))
-    workers = 6
+    workers = 5
     keep_netcdfs = False
     """  --( ------------- )--  """
 
@@ -350,7 +380,7 @@ if __name__=="__main__":
     """
     ceres_swaths = []
     for p in swaths_pkls:
-        ceres_swaths += [FG1D(*s) for s in pkl.load(p.open("rb"))[-5:]]
+        ceres_swaths += [FG1D(*s) for s in pkl.load(p.open("rb"))[1::4]]
     #ceres_labels = ceres_swaths[0].labels
     #assert all(set(C.labels)==set(ceres_labels) for C in ceres_swaths)
 
@@ -358,8 +388,8 @@ if __name__=="__main__":
     #time_ranges = [(datetime.fromtimestamp(np.min(C.data("epoch"))),
     #                datetime.fromtimestamp(np.max(C.data("epoch"))))
     #               for C in ceres_swaths]
-    ceres_swaths = ceres_swaths[:15]
-
+    random.shuffle(ceres_swaths)
+    ceres_swaths = ceres_swaths[-15:]
     """
     Search for MODIS L1b files on the LAADS DAAC that were acquired at the same
     time and in the same area as each CERES swath identified by
@@ -380,8 +410,11 @@ if __name__=="__main__":
             "lat_buffer":2,
             "lon_buffer":2,
             ## Size of hdf5 chunks in the first 2 dimensions of the hdf5
+            ## (64,64,32) chunks of 8 byte float equates to 1MB per chunk
             "spatial_chunks":(64,64),
-            "debug":debug
+            ## Chunk buffer volume in MB
+            "buf_size_mb":512,
+            "debug":debug,
             }
 
 

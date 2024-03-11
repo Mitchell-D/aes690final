@@ -166,7 +166,7 @@ class FeatureGridV2:
             return self._data[*slices]
         elif hasattr(flabel, "__iter__") and not type(flabel)==str:
             fidx = tuple(self._flabels.index(fl) for fl in flabel)
-            return self._data[*slices,fidx]
+            return self._data[*slices,...,fidx]
         assert flabel in self._flabels
         return self._data[*slices, ..., self._flabels.index(flabel)]
 
