@@ -122,7 +122,15 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
     data = np.stack(data, axis=-1)
     return labels,data,{"ctr_wls":ctr_wls}
 
-def get_modis_geometry(modis_geoloc_file:Path, include_masks=False,):
+def get_modis_geometry(modis_geoloc_file:Path, include_masks:bool=False,
+        include_geod_vectors:bool=False):
+    """
+    Expected input file follows the MxD03 standard:
+    https://ladsweb.modaps.eosdis.nasa.gov/filespec/MODIS/6/MOD03
+
+    :@param modis_geoloc_file: MxD03 Geolocation netCDF (from LAADS DAAC)
+    :@param include_masks: If True,
+    """
     fields  = [
             ("Latitude", "lat"),
             ("Longitude", "lon"),
@@ -132,16 +140,32 @@ def get_modis_geometry(modis_geoloc_file:Path, include_masks=False,):
             ("SolarZenith", "sza"),
             ("SolarAzimuth", "saa"),
             ]
-    scale = np.array([1., 1., 1., .01, .01, .01])
+    ## Viewing angles are in degrees*10
+    scale = np.array([1., 1., 1., .01, .01, .01, .01])
     if include_masks:
         fields += [
                 ("Land/SeaMask", "m_land"),
                 ("WaterPresent", "m_water"),
                 ]
+        ## Add unit scale values for the masks
         scale = np.concatenate([scale, np.array([1,1])])
+    ## Open the file and read the requested fields in order
     sd = SD(modis_geoloc_file.as_posix(), SDC.READ)
     records,labels = zip(*fields)
-    data = np.stack([sd.select(f).get()/scale for f in records], axis=-1)
+    ## Stack all of the data to a (M,N,G) grid for G geometric features
+    data = np.stack([
+        sd.select(f).get().astype(float)/scale
+        for f in records
+        ], axis=-1)
+    ## If requested, calculate geodetic X,Y,Z vectors to each pixel
+    if include_geod_vectors:
+        colat,lon = data[...,0],90.-data[...,1]
+        v_img = np.stack([
+            np.sin(np.deg2rad(lat)) * np.cos(np.deg2rad(lon)),
+            np.sin(np.deg2rad(lat)) * np.sin(np.deg2rad(lon)),
+            np.cos(np.deg2rad(lat))
+            ])
+
     return labels,data
 
 def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
@@ -225,6 +249,7 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
             get_modis_geometry(
                 modis_geoloc_file=f,
                 include_masks=keep_masks,
+                include_geod_vectors=True,
                 )
             for f in geoloc_files
             ])

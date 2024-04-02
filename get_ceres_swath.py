@@ -144,6 +144,11 @@ def get_view_angles(lat, lon, nadir_lat, nadir_lon):
     and centriod vectors, as well as a satellite-relative coordinate reference
     frame with respect to each centroid location.
 
+    Satellite-relative vector:
+    Y':= geodetic 3-vector pointing directly towards the centroid
+    X':= geodetic 3-vector perpendicular (right of) scan direction
+    Z':= geodetic 3-vector parallel (opposite of) scan direction
+
     https://ceres.larc.nasa.gov/documents/ATBD/pdf/r2_2/ceres-atbd2.2-s4.4.pdf
 
     See figure 4.4-2 in the ATBD for more details.
@@ -272,6 +277,10 @@ def get_ceres_swaths(
         print(l, valid_counts/ceres.size)
     #'''
 
+    ## Given the sub-satellite latitude and longitude as well as the centroid
+    ## latitude and longitude of a ceres of CERES footprints, calculates the
+    ## satellite and centroid geodetic position vectors as well as the relative
+    ## vector from the satellite to the corresponding centroid
     v_sat, v_cen, vv_s2c = get_view_angles(
             lat=ceres.data("lat"),
             lon=ceres.data("lon"),
