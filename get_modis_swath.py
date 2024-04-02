@@ -132,14 +132,16 @@ def get_modis_geometry(modis_geoloc_file:Path, include_masks=False,):
             ("SolarZenith", "sza"),
             ("SolarAzimuth", "saa"),
             ]
+    scale = np.array([1., 1., 1., .01, .01, .01])
     if include_masks:
         fields += [
                 ("Land/SeaMask", "m_land"),
                 ("WaterPresent", "m_water"),
                 ]
+        scale = np.concatenate([scale, np.array([1,1])])
     sd = SD(modis_geoloc_file.as_posix(), SDC.READ)
     records,labels = zip(*fields)
-    data = np.stack([sd.select(f).get() for f in records], axis=-1)
+    data = np.stack([sd.select(f).get()/scale for f in records], axis=-1)
     return labels,data
 
 def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
@@ -227,12 +229,15 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
             for f in geoloc_files
             ])
 
+    print(f"Swath count: {len(data)}")
     ## Zonally concatenate overpasses so that North is up.
     ## Terra is descending during the day, and aqua is ascending.
-    data = np.concatenate(data[::(-1,1)[isaqua]], axis=0)
-    geom = np.concatenate(geom[::(-1,1)[isaqua]], axis=0)
+    data = np.concatenate(data, axis=0)[::(-1,1)[isaqua]]
+    geom = np.concatenate(geom, axis=0)[::(-1,1)[isaqua]]
     ## Concatenate data and geometric features along the feature axis
     data = np.concatenate((data,geom), axis=-1)
+    print(geom)
+    print(f"Data shape: {data.shape}")
 
     ## Since aqua is ascending during the day, its scan is inverted.
     if isaqua:
@@ -324,19 +329,15 @@ if __name__=="__main__":
     ## which should contain a list of FG1D-style tuples.
     #swaths_pkl = data_dir.joinpath(
     swaths_pkls = [
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_idn_aqua_20180101-20200916.pkl"
-                ),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_idn_aqua_20200916-20201231.pkl"
-                ),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_idn_terra_20180101-20200815.pkl"
-                ),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_idn_terra_20200816-20201231.pkl"
-                ),
+            "ceres_swaths/ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl",
+            "ceres_swaths/ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl",
+            "ceres_swaths/ceres-ssf_hkh_aqua_20180101-20201231_0mod3.pkl",
+            "ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl",
+            #"ceres_swaths/ceres-ssf_idn_aqua_20200916-20201231.pkl"
+            #"ceres_swaths/ceres-ssf_idn_terra_20180101-20200815.pkl"
+            #"ceres_swaths/ceres-ssf_idn_terra_20200816-20201231.pkl"
             ]
+    swaths_pkls = list(map(lambda p: data_dir.joinpath(p), swaths_pkls))
     '''
             data_dir.joinpath(
                 "ceres_swaths/ceres-ssf_hkh_terra_20180101-20201231.pkl"),
@@ -374,26 +375,18 @@ if __name__=="__main__":
     keep_netcdfs = False
     """  --( ------------- )--  """
 
-    """
-    Use the epoch time bounds from a CERES swath to set limits
-    on the acquisition times of MODIS granules.
-    """
+    ## Extract and shuffle all the listed swaths together;
+    ## beware memory constraints here.
     ceres_swaths = []
     for p in swaths_pkls:
-        ceres_swaths += [FG1D(*s) for s in pkl.load(p.open("rb"))[1::4]]
-    #ceres_labels = ceres_swaths[0].labels
-    #assert all(set(C.labels)==set(ceres_labels) for C in ceres_swaths)
-
-    ## Get the time ranges from the individual footprint epoch times
-    #time_ranges = [(datetime.fromtimestamp(np.min(C.data("epoch"))),
-    #                datetime.fromtimestamp(np.max(C.data("epoch"))))
-    #               for C in ceres_swaths]
+        ceres_swaths += [FG1D(*s) for s in pkl.load(p.open("rb"))]
     random.shuffle(ceres_swaths)
-    ceres_swaths = ceres_swaths[-15:]
+
+    ceres_swaths = ceres_swaths[:50]
+
     """
     Search for MODIS L1b files on the LAADS DAAC that were acquired at the same
-    time and in the same area as each CERES swath identified by
-    get_ceres_swath.py
+    time and in the same area as each CERES swath from get_ceres_swath.py
     """
     ## download modis data near the footprints
     shared_args = {

@@ -37,7 +37,7 @@ netCDF dataset label in a LARC CERES SSF file to a simpler label.
 Providing a list of strings with the same length as an array saves each
 array member as its own feature with the corresponding provided label.
 """
-label_mapping = [
+ceres_label_mapping = [
     ## (M,) time and geometry information
     ("Time_of_observation", "jday"),
     ("lat", "lat"),
@@ -104,14 +104,15 @@ def parse_ceres(ceres_nc:Path):
     is part of the FeatureGrid convention, and contains only a string
     marking the swath's satellite platform of origin.
 
-    This method extracts datasets and assigns labels based on the label_mapping
+    This method extracts datasets and assigns labels based on the
+    ceres_label_mapping
     list configured above.
     """
     ds = nc.Dataset(ceres_nc, 'r')
     data = []
     labels = []
     ## Extract and rename each of the fields in themapping above
-    for ncl,l in label_mapping:
+    for ncl,l in ceres_label_mapping:
         X = ds.variables[ncl][:]
         if not type(l) is str:
             assert len(l) == X.shape[1]
@@ -190,7 +191,32 @@ def get_ceres_swaths(
         ub_sza=180., ub_vza=90., lb_swath_interval=300, ub_swath_interval=1500,
         ):
     """
-    This method subsumes
+    This method extracts data from a CERES SSF netCDF file acquired from:
+
+    The LARC Downloader: https://ceres-tool.larc.nasa.gov/ord-tool/
+
+    returns a list of FG1D objects corresponding to individual overpasses.
+
+    This method's responsibilities:
+
+    1. Delete unneeded fields listed in drop_fields.
+    2. Swap julian calendar for epoch seconds.
+    3. Mask out night time footprints and those outside the VZA range (FOV).
+    4. Drop footprints with invalid critical fields listed in reject_if_nan.
+    5. Calculate viewing geometry and add the new info to the dataset.
+    6. Split all footprints into overpasses based on their acquisition time.
+
+    :@param ceres_nc_file:LARC CERES SSF file to parse.
+    :@param drop_fields: By default, this method extracts all of the fields
+        in ceres_label_mapping, but if the 'new' keys of valid fields are
+        provided here, they won't be included in the returned footprints.
+    :@param reject_if_nan: Fields that must be a valid number, or else
+        footprints with NaN values are dropped.
+    :@param ub_sza: Upper bound on sza to restrict daytime pixels
+    :@param ub_vza: Upper bound on viewing zenith angle (MODIS FOV is like 45)
+    :@param lb_swath_interval: Minimum amount of time between swaths (sec)
+    :@param ub_swath_interval: Maximum amount of time included in a swath (sec)
+
     """
     ceres = FG1D(*parse_ceres(ceres_nc_file))
     ## process only one CERES order as a FG1D object.
@@ -227,7 +253,6 @@ def get_ceres_swaths(
     ceres = ceres.mask(ceres.data("sza")<=ub_sza)
     ## Limit the FoV to prevent problems with panoramic distortion
     ceres = ceres.mask(ceres.data("vza")<=ub_vza)
-
 
     ## NaN values are marked in the SSF files with values >1e35
     is_valid = lambda X: X < 1e30
@@ -297,21 +322,14 @@ def get_ceres_swaths(
 if __name__=="__main__":
     data_dir = Path("data")
     #data_dir = Path("/rstor/mdodson/aes690final/ceres")
-    ceres_nc_dir = data_dir.joinpath("ceres") ## directory of netCDFs from LARC
-    ## Directory containing pickles corresponding to lists of swath FGs
-    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
-    ## Upper bound on sza to restrict daytime pixels
-    #ub_sza = 75
-    ## Upper bound on viewing zenith angle (MODIS FOV is like 45)
-    #ub_vza = 30
-    ## minimum amount of time between swaths (sec)
-    #lb_swath_interval = 300
-    ## maximum amount of time included in a swath (sec)
-    #ub_swath_interval = lb_swath_interval*5
-    ## The easiest way to convert from julian is wrt a specific reference day.
 
-    ## netCDF from https://ceres-tool.larc.nasa.gov/ord-tool/
-    region_label = "idn"
+    ## directory of netCDFs from https://ceres-tool.larc.nasa.gov/ord-tool/
+    ceres_nc_dir = data_dir.joinpath("ceres")
+    ## directory to dump pickles corresponding to lists of swath FGs
+    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
+
+    ## (!!!) Region label used to identify files to parse (!!!)
+    region_label = "azn"
     region_files = [
             f for f in ceres_nc_dir.iterdir()
             if (f.suffix == ".nc" and region_label in f.stem)
@@ -319,17 +337,9 @@ if __name__=="__main__":
 
     ## Minimum number of valid footprints that warrant storing a swath
     min_footprints = 50
-    """
-    Preprocessing steps below:
 
-    1. Delete unneeded fields listed in drop_fields.
-    2. Swap julian calendar for epoch seconds.
-    3. Mask out night time footprints and those outside the VZA range (FOV).
-    4. Drop footprints with invalid critical fields listed in reject_if_nan.
-    5. Calculate viewing geometry and add the new info to the dataset.
-    6. Split all footprints into overpasses based on their acquisition time.
-    """
-
+    ## Parse the CERES files into lists of FG1D objects, each corresponding
+    ## to a single satellite overpass' CERES footprints within the region.
     for ceres_file in region_files:
         swaths_pkl = swath_pkl_dir.joinpath(f"{ceres_file.stem}.pkl")
         swaths = get_ceres_swaths(
@@ -342,10 +352,22 @@ if __name__=="__main__":
                 ub_sza=75.,
                 ub_vza=30.,
                 )
-
         swaths = list(filter(lambda s:s.size>min_footprints, swaths))
-        ### (!!!) Only take every 2nd swath (!!!)
-        swaths = swaths[::2]
+
+        """
+        Optionally subset the swaths by a mod value. This will sparsely
+        sub-sample the data so that the full range of seasons is represented,
+        but fewer total swaths are extracted.
+
+        Later on, consider sampling (mod 3)+1 or (mod 3)+2 indexed datasets
+        """
+        ### (!!!) Only take every 3rd swath (!!!)
+        swaths = swaths[::3]
+        swaths_subset_label = "_0mod3"
+        swaths_pkl = swaths_pkl.parent.joinpath(
+                swaths_pkl.stem + swaths_subset_label + ".pkl")
+        print(swaths_pkl)
+
         ## Add the region key to all the meta dicts
         for s in swaths:
             s.meta.update(region=region_label)
