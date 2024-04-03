@@ -44,6 +44,7 @@ def get_view_vectors(sensor_equatorial_vectors, pixel_equatorial_vectors,
     :@param sensor_equatorial_vectors: (...,3) shaped (X,Y,Z)
     :@param pixel_equatorial_vectors:
     """
+    ## general labels for the relative equatorial components.
     view_vector_labels = [
         "xx_s2c", "xy_s2c", "xz_s2c",
         "yx_s2c", "yy_s2c", "yz_s2c",

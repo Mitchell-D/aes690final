@@ -20,6 +20,7 @@ from krttdkit.acquire import laads
 from FG1D import FG1D
 from FeatureGridV2 import FeatureGridV2 as FG
 import modis_rsrs
+from geom_utils import get_equatorial_vectors
 
 def modis_band_to_wl(band:int):
     """
@@ -75,10 +76,13 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
             }
 
     band_keys = {k:list(sd.select(k).get()) for k in record_mapping.keys()}
-    labels = []
-    data = []
-    ctr_wls = []
-    for b in bands:
+    labels,data,ctr_wls = [],[],[]
+    wls_bands = sorted(
+            [(modis_band_to_wl(int(b)),b) for b in bands], key=lambda t:t[0]
+            )
+    for wl,b in wls_bands:
+        labels.append(b)
+        ctr_wls.append(wl)
         if b == 26:
             ## Band 26 is also in the normal 1km reflectance dataset,
             ## but my understanding is that one doesn't have the updated
@@ -99,6 +103,8 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
                 tmp_attrs = tmp_sd.attributes()
                 raw_data = tmp_sd.get()[idx]
                 break
+        ## convert to int for half-bands
+        #ctr_wls.append(modis_band_to_wl(int(b)))
         if "reflectance_units" in tmp_attrs.keys() \
                 and l1b_convert_reflectance:
             ## Should be divided by cos(sza) for true BRDF
@@ -108,10 +114,9 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
             c1 = 1.191042e8 # W / (m^2 sr um^-4)
             c2 = 1.4387752e4 # K um
             # Get brightness temp with planck's function at the ctr wl
-            tmp_data = c2/(ctr_wls[-1]*np.log(c1/(ctr_wls[-1]**5*raw_data)+1))
-        labels.append(b)
+            print(f"INFRARED WL:{wl}")
+            tmp_data = c2/(wl*np.log(c1/(wl**5*raw_data)+1))
         data.append(tmp_data)
-        ctr_wls.append(modis_band_to_wl(int(b)))
         if keep_rad:
             tmp_data = (raw_data-tmp_attrs["radiance_offsets"][idx]) \
                     * tmp_attrs["radiance_scales"][idx]
@@ -121,10 +126,15 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
     return labels,data,{"ctr_wls":ctr_wls}
 
 def get_modis_geometry(modis_geoloc_file:Path, include_masks:bool=False,
-        include_geod_vectors:bool=False):
+        include_equatorial_vectors:bool=False):
     """
     Expected input file follows the MxD03 standard:
     https://ladsweb.modaps.eosdis.nasa.gov/filespec/MODIS/6/MOD03
+
+    (1) Extract geolocation fields from a MxD03 hdf4 file
+    (2) Re-scale the features to normal units
+    (3) Optionally calculate the equatorial coordinates of all pixels using
+        the formula from the CERES ATBD 2.2 subsection 4.4
 
     :@param modis_geoloc_file: MxD03 Geolocation netCDF (from LAADS DAAC)
     :@param include_masks: If True,
@@ -152,18 +162,18 @@ def get_modis_geometry(modis_geoloc_file:Path, include_masks:bool=False,
     records,labels = zip(*fields)
     ## Stack all of the data to a (M,N,G) grid for G geometric features
     data = np.stack([
-        sd.select(f).get().astype(float)/scale
+        sd.select(f).get().astype(float)
         for f in records
-        ], axis=-1)
-    ## If requested, calculate geodetic X,Y,Z vectors to each pixel
-    if include_geod_vectors:
-        colat,lon = data[...,0],90.-data[...,1]
-        v_img = np.stack([
-            np.sin(np.deg2rad(lat)) * np.cos(np.deg2rad(lon)),
-            np.sin(np.deg2rad(lat)) * np.sin(np.deg2rad(lon)),
-            np.cos(np.deg2rad(lat))
-            ])
+        ], axis=-1)/scale
 
+    ## If requested, calculate equatorial X,Y,Z vectors of each pixel and
+    ## concatenate the data along the feature axis, as well as labels.
+    if include_equatorial_vectors:
+        eq_labels = ("x_img", "y_img", "z_img")
+        eq_vecs = get_equatorial_vectors(
+                latitude=data[...,0], longitude=data[...,1])
+        data = np.concatenate((data,eq_vecs), axis=-1)
+        labels = (*labels, *eq_labels)
     return labels,data
 
 def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
@@ -187,9 +197,18 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
     geo_sunsat_labels = ["lat", "lon", "height", "sza", "saa", "vza", "vaa"]
     #t0,tf = init_time.timestamp(), final_time.timestamp()
 
+    avg_time = datetime.fromtimestamp(np.average(ceres_swath.data("epoch")))
+    timestr = avg_time.strftime(f"%Y%m%d-%H%M")
+    sat = ceres_swath.meta.get("satellite")
+    h5_path = swath_h5_dir.joinpath(
+            f"swath_{region_label}_{sat}_{timestr}.h5")
+    if h5_path.exists():
+        raise ValueError(f"Combined hdf5 {h5_path} already exists!")
+
     init_time = datetime.fromtimestamp(np.min(ceres_swath.data("epoch")))
     final_time = datetime.fromtimestamp(np.max(ceres_swath.data("epoch")))
-    avg_time = datetime.fromtimestamp(np.average(ceres_swath.data("epoch")))
+
+    print(f"Swath init/final:", init_time, final_time)
 
     ## Extract a grid that is slightly larger than the footprint bounds.
     latlon_bbox=(
@@ -247,10 +266,11 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
             get_modis_geometry(
                 modis_geoloc_file=f,
                 include_masks=keep_masks,
-                include_geod_vectors=True,
+                include_equatorial_vectors=True,
                 )
             for f in geoloc_files
             ])
+
 
     ## Zonally concatenate overpasses so that North is up.
     ## Terra is descending during the day, and aqua is ascending.
@@ -258,7 +278,7 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
     geom = np.concatenate(geom, axis=0)[::(-1,1)[isaqua]]
     ## Concatenate data and geometric features along the feature axis
     data = np.concatenate((data,geom), axis=-1)
-    print(geom)
+
     if debug:
         print(f"Swath count: {len(data)}")
         print(f"Data shape: {data.shape}")
@@ -285,16 +305,12 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
     r_lon = np.amin(r_lon), np.amax(r_lon)
 
     if debug:
-        print(f"before",modis_fg.shape)
+        print(f"before subgrid:",modis_fg.shape)
     modis_fg = modis_fg.subgrid(y=r_lat, x=r_lon)
     if debug:
-        print(f"after",modis_fg.shape)
+        print(f"after subgrid:",modis_fg.shape)
 
-    timestr = avg_time.strftime(f"%Y%m%d-%H%M")
     ## Open file for writing with 128MB buffer
-    sat = ceres_swath.meta.get("satellite")
-    h5_path = swath_h5_dir.joinpath(
-            f"swath_{region_label}_{sat}_{timestr}.h5")
     f_swath = h5py.File(h5_path, "w-", rdcc_nbytes=buf_size_mb*1024**2)
     g_swath = f_swath.create_group("/data")
     g_swath.attrs["modis"] = modis_fg.to_json()
@@ -334,10 +350,13 @@ def mp_get_modis_swath(swath:dict):
 
 
 if __name__=="__main__":
-    debug = False
+    debug = True
     data_dir = Path("data")
     modis_nc_dir = data_dir.joinpath("modis")
-    modis_swath_dir = data_dir.joinpath("modis_swaths")
+    ## Directory where already-generated CERES swaths pkls are retrieved
+    ceres_swath_dir = data_dir.joinpath("ceres_swaths")
+    ## Directory where new MODIS and CERES swaths arrays are deposited
+    combined_swath_dir = data_dir.joinpath("combined_swaths")
 
     """
     Generate a API download  token with an EarthData account here:
@@ -353,34 +372,20 @@ if __name__=="__main__":
     ## which should contain a list of FG1D-style tuples.
     #swaths_pkl = data_dir.joinpath(
     swaths_pkls = [
-            "ceres_swaths/ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl",
-            "ceres_swaths/ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl",
-            "ceres_swaths/ceres-ssf_hkh_aqua_20180101-20201231_0mod3.pkl",
-            "ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl",
-            #"ceres_swaths/ceres-ssf_idn_aqua_20200916-20201231.pkl"
-            #"ceres_swaths/ceres-ssf_idn_terra_20180101-20200815.pkl"
-            #"ceres_swaths/ceres-ssf_idn_terra_20200816-20201231.pkl"
+            #"ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl",
+            #"ceres-ssf_azn_terra_20180101-20201231_0mod3.pkl",
+            #"ceres-ssf_hkh_aqua_20180101-20201231_0mod3.pkl",
+            #"ceres-ssf_hkh_terra_20180101-20201231_0mod3.pkl",
+            #"ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl",
+            #"ceres-ssf_idn_aqua_20200916-20201231_0mod3.pkl",
+            #"ceres-ssf_idn_terra_20180101-20200815_0mod3.pkl",
+            #"ceres-ssf_idn_terra_20200816-20201231_0mod3.pkl",
+            #"ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl",
+            #"ceres-ssf_neus_aqua_20201129-20201231_0mod3.pkl",
+            #"ceres-ssf_neus_terra_20180101-20201112_0mod3.pkl",
+            "ceres-ssf_neus_terra_20201112-20201231_0mod3.pkl",
             ]
-    swaths_pkls = list(map(lambda p: data_dir.joinpath(p), swaths_pkls))
-    '''
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_hkh_terra_20180101-20201231.pkl"),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_hkh_aqua_20180101-20201231.pkl"),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_azn_terra_20180101-20201231.pkl"),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_azn_aqua_20180101-20201231.pkl"),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_neus_terra_20180101-20201112.pkl"),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_neus_terra_20201112-20201231.pkl"),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129.pkl"),
-            data_dir.joinpath(
-                "ceres_swaths/ceres-ssf_neus_aqua_20201129-20201231.pkl"),
-            ]
-    '''
+    swaths_pkls = list(map(lambda p: ceres_swath_dir.joinpath(p), swaths_pkls))
     modis_bands = [
             8,              # .41                       Near UV
             1,4,3,          # .64,.55,.46               (R,G,B)
@@ -393,18 +398,21 @@ if __name__=="__main__":
             31,             # 10.9                      clean window
             33,             # 13.3                      co2
             ]
+
     ## lat,lon preset for seus
     #bbox = ((28,38), (-95,-75))
-    workers = 5
+    workers = 1
+    rng_seed = 200007221752
     keep_netcdfs = False
     """  --( ------------- )--  """
 
     ## Extract and shuffle all the listed swaths together;
     ## beware memory constraints here.
+    rng = np.random.default_rng(seed=rng_seed)
     ceres_swaths = []
     for p in swaths_pkls:
         ceres_swaths += [FG1D(*s) for s in pkl.load(p.open("rb"))]
-    random.shuffle(ceres_swaths)
+    rng.shuffle(ceres_swaths)
 
     ceres_swaths = ceres_swaths[:50]
 
@@ -417,9 +425,10 @@ if __name__=="__main__":
             "laads_token":token,
             ## Directory where MODIS netCDF files are deposited
             "modis_nc_dir":modis_nc_dir,
-            "swath_h5_dir":modis_swath_dir,
+            "swath_h5_dir":combined_swath_dir,
             ## MODIS bands to extract. None for all bands.
             "bands":None,
+            #"bands":modis_bands,
             ## Extract the MODIS grid out to a couple degrees latitude and
             ## longitude outside the minimum and maximum footprint centroid
             ## boundaries. This is needed in order to extract grids around
@@ -442,5 +451,5 @@ if __name__=="__main__":
             ]
     with Pool(workers) as pool:
         swath_count = 0
-        for args,f in pool.map(mp_get_modis_swath, modis_args):
+        for args,f in pool.imap(mp_get_modis_swath, modis_args):
             print(f"Generated swath file: {f.as_posix()}")
