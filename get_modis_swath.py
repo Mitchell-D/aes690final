@@ -102,8 +102,6 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
         if "reflectance_units" in tmp_attrs.keys() \
                 and l1b_convert_reflectance:
             ## Should be divided by cos(sza) for true BRDF
-            #print(tmp_attrs["reflectance_offsets"])
-            #print(b)
             tmp_data = (raw_data-tmp_attrs["reflectance_offsets"][idx]) \
                     * tmp_attrs["reflectance_scales"][idx]
         elif not "reflectance_units" in tmp_attrs.keys() and l1b_convert_tb:
@@ -254,7 +252,6 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
             for f in geoloc_files
             ])
 
-    print(f"Swath count: {len(data)}")
     ## Zonally concatenate overpasses so that North is up.
     ## Terra is descending during the day, and aqua is ascending.
     data = np.concatenate(data, axis=0)[::(-1,1)[isaqua]]
@@ -262,7 +259,9 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
     ## Concatenate data and geometric features along the feature axis
     data = np.concatenate((data,geom), axis=-1)
     print(geom)
-    print(f"Data shape: {data.shape}")
+    if debug:
+        print(f"Swath count: {len(data)}")
+        print(f"Data shape: {data.shape}")
 
     ## Since aqua is ascending during the day, its scan is inverted.
     if isaqua:
