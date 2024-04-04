@@ -13,13 +13,15 @@ from collections import ChainMap
 from pyhdf.SD import SD,SDC
 import h5py
 
-from krttdkit.operate import enhance as enh
-from krttdkit.acquire import modis
-from krttdkit.acquire import laads
+#from krttdkit.operate import enhance as enh
+#from krttdkit.acquire import modis
+#from krttdkit.acquire import laads
 
 from FG1D import FG1D
 from FeatureGridV2 import FeatureGridV2 as FG
 import modis_rsrs
+
+
 
 def modis_band_to_wl(band:int):
     """
@@ -178,7 +180,7 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
     ## viewing zenith should be the limiting factor for the MODIS grid.
     isaqua = ceres_swath.meta.get("satellite") == "aqua"
     l1b_files = [
-            laads.download(
+            acquire.download(
                 target_url=g["downloadsLink"],
                 dest_dir=modis_nc_dir,
                 raw_token=laads_token,
@@ -192,7 +194,7 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
                 )
             ]
     geoloc_files = [
-            laads.download(
+            acquire.download(
                 target_url=g["downloadsLink"],
                 dest_dir=modis_nc_dir,
                 raw_token=laads_token,
@@ -356,6 +358,8 @@ if __name__=="__main__":
                 "ceres_swaths/ceres-ssf_neus_aqua_20201129-20201231.pkl"),
             ]
     '''
+    modis_bands = list(range(37))
+    '''
     modis_bands = [
             8,              # .41                       Near UV
             1,4,3,          # .64,.55,.46               (R,G,B)
@@ -368,6 +372,7 @@ if __name__=="__main__":
             31,             # 10.9                      clean window
             33,             # 13.3                      co2
             ]
+    '''
     ## lat,lon preset for seus
     #bbox = ((28,38), (-95,-75))
     workers = 5
@@ -411,12 +416,12 @@ if __name__=="__main__":
             "lon_buffer":2,
             ## Size of hdf5 chunks in the first 2 dimensions of the hdf5
             ## (64,64,32) chunks of 8 byte float equates to 1MB per chunk
+            ## so this should be a reasonable size for 36 bands.
             "spatial_chunks":(64,64),
             ## Chunk buffer volume in MB
             "buf_size_mb":512,
             "debug":debug,
             }
-
 
     ## Generate time ranges for each distinct ceres swath time range
     modis_args = [
