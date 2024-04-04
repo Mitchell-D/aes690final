@@ -105,6 +105,8 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
                 break
         ## convert to int for half-bands
         #ctr_wls.append(modis_band_to_wl(int(b)))
+        tmp_rad = (raw_data-tmp_attrs["radiance_offsets"][idx]) \
+                * tmp_attrs["radiance_scales"][idx]
         if "reflectance_units" in tmp_attrs.keys() \
                 and l1b_convert_reflectance:
             ## Should be divided by cos(sza) for true BRDF
@@ -114,14 +116,11 @@ def get_modis_l1b(modis_l1b_file:Path, bands:tuple=None, keep_rad:bool=False,
             c1 = 1.191042e8 # W / (m^2 sr um^-4)
             c2 = 1.4387752e4 # K um
             # Get brightness temp with planck's function at the ctr wl
-            print(f"INFRARED WL:{wl}")
-            tmp_data = c2/(wl*np.log(c1/(wl**5*raw_data)+1))
+            tmp_data = c2/(wl*np.log(c1/(wl**5*tmp_rad)+1))
         data.append(tmp_data)
         if keep_rad:
-            tmp_data = (raw_data-tmp_attrs["radiance_offsets"][idx]) \
-                    * tmp_attrs["radiance_scales"][idx]
             labels.append(f"{b}-rad")
-            data.append(tmp_data)
+            data.append(tmp_rad)
     data = np.stack(data, axis=-1)
     return labels,data,{"ctr_wls":ctr_wls}
 
@@ -274,8 +273,8 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
 
     ## Zonally concatenate overpasses so that North is up.
     ## Terra is descending during the day, and aqua is ascending.
-    data = np.concatenate(data, axis=0)[::(-1,1)[isaqua]]
-    geom = np.concatenate(geom, axis=0)[::(-1,1)[isaqua]]
+    data = np.concatenate(data, axis=0)#[::(-1,1)[isaqua]]
+    geom = np.concatenate(geom, axis=0)#[::(-1,1)[isaqua]]
     ## Concatenate data and geometric features along the feature axis
     data = np.concatenate((data,geom), axis=-1)
 
@@ -301,8 +300,8 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
 
     r_lat = np.squeeze(np.array(np.where(np.any((m_lat & m_lon), axis=1))))
     r_lon = np.squeeze(np.array(np.where(np.any((m_lat & m_lon), axis=0))))
-    r_lat = np.amin(r_lat), np.amax(r_lat)
-    r_lon = np.amin(r_lon), np.amax(r_lon)
+    r_lat = np.amin(r_lat),np.amax(r_lat)
+    r_lon = np.amin(r_lon),np.amax(r_lon)
 
     if debug:
         print(f"before subgrid:",modis_fg.shape)
@@ -343,8 +342,8 @@ def mp_get_modis_swath(swath:dict):
         assert all(k in args.keys() for k in mandatory_args)
         return args,get_modis_swath(**args)
     except Exception as e:
-        raise e
-        #print(e)
+        #raise e
+        print(e)
         return None
 
 
@@ -372,18 +371,18 @@ if __name__=="__main__":
     ## which should contain a list of FG1D-style tuples.
     #swaths_pkl = data_dir.joinpath(
     swaths_pkls = [
-            #"ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl",
+            "ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl",
             #"ceres-ssf_azn_terra_20180101-20201231_0mod3.pkl",
             #"ceres-ssf_hkh_aqua_20180101-20201231_0mod3.pkl",
             #"ceres-ssf_hkh_terra_20180101-20201231_0mod3.pkl",
-            #"ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl",
+            "ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl",
             #"ceres-ssf_idn_aqua_20200916-20201231_0mod3.pkl",
             #"ceres-ssf_idn_terra_20180101-20200815_0mod3.pkl",
             #"ceres-ssf_idn_terra_20200816-20201231_0mod3.pkl",
-            #"ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl",
+            "ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl",
             #"ceres-ssf_neus_aqua_20201129-20201231_0mod3.pkl",
             #"ceres-ssf_neus_terra_20180101-20201112_0mod3.pkl",
-            "ceres-ssf_neus_terra_20201112-20201231_0mod3.pkl",
+            #"ceres-ssf_neus_terra_20201112-20201231_0mod3.pkl",
             ]
     swaths_pkls = list(map(lambda p: ceres_swath_dir.joinpath(p), swaths_pkls))
     modis_bands = [
@@ -401,7 +400,7 @@ if __name__=="__main__":
 
     ## lat,lon preset for seus
     #bbox = ((28,38), (-95,-75))
-    workers = 1
+    workers = 4
     rng_seed = 200007221752
     keep_netcdfs = False
     """  --( ------------- )--  """
@@ -451,5 +450,7 @@ if __name__=="__main__":
             ]
     with Pool(workers) as pool:
         swath_count = 0
-        for args,f in pool.imap(mp_get_modis_swath, modis_args):
-            print(f"Generated swath file: {f.as_posix()}")
+        for result in pool.imap(mp_get_modis_swath, modis_args):
+            if not result is None:
+                args,f = result
+                print(f"Generated swath file: {f.as_posix()}")
