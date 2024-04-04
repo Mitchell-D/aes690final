@@ -22,13 +22,8 @@ from pathlib import Path
 from pprint import pprint as ppt
 
 from FG1D import FG1D
-
-## Constants from CERES ATBD 2.2 subsection 4.4 Table 1.
-r_E = 6367 ## Radius of Earth (km)
-h = 705 ## Altitude EOS (km)
-alpha_h = 64.2 ## Cone angle at the horizon (degrees)
-gamma_h = 25.8 ## Earth central angle at horizon (degrees)
-period = 98.7 ## Period (minutes)
+from geom_utils import get_view_vectors,get_equatorial_vectors
+from geom_utils import get_sensor_pixel_geometry
 
 """
 List of 2-tuples like (nc_dataset_label, output_labels) assigning each
@@ -37,13 +32,13 @@ netCDF dataset label in a LARC CERES SSF file to a simpler label.
 Providing a list of strings with the same length as an array saves each
 array member as its own feature with the corresponding provided label.
 """
-label_mapping = [
+ceres_label_mapping = [
     ## (M,) time and geometry information
     ("Time_of_observation", "jday"),
     ("lat", "lat"),
     ("lon", "lon"),
-    ("Colatitude_of_subsatellite_point_at_surface_at_observation","nadir_lat"),
-    ("Longitude_of_subsatellite_point_at_surface_at_observation","nadir_lon"),
+    ("Colatitude_of_subsatellite_point_at_surface_at_observation","ndr_colat"),
+    ("Longitude_of_subsatellite_point_at_surface_at_observation","ndr_lon"),
     ("CERES_viewing_zenith_at_surface", "vza"),
     ("CERES_relative_azimuth_at_surface", "raa"),
     ("CERES_solar_zenith_at_surface", "sza"),
@@ -104,14 +99,15 @@ def parse_ceres(ceres_nc:Path):
     is part of the FeatureGrid convention, and contains only a string
     marking the swath's satellite platform of origin.
 
-    This method extracts datasets and assigns labels based on the label_mapping
+    This method extracts datasets and assigns labels based on the
+    ceres_label_mapping
     list configured above.
     """
     ds = nc.Dataset(ceres_nc, 'r')
     data = []
     labels = []
     ## Extract and rename each of the fields in themapping above
-    for ncl,l in label_mapping:
+    for ncl,l in ceres_label_mapping:
         X = ds.variables[ncl][:]
         if not type(l) is str:
             assert len(l) == X.shape[1]
@@ -136,65 +132,39 @@ def jday_to_epoch(jday:float):
     ref_gday = datetime(year=1980,month=1,day=1)
     return (ref_gday + timedelta(days=jday-ref_jday)).timestamp()
 
-def get_view_angles(lat, lon, nadir_lat, nadir_lon):
-    """
-    Calculates satellite to centroid viewing angle vectors according to
-    CERES ATBD 2.2 subsection 4.4, and adds the resulting geodetic satellite
-    and centriod vectors, as well as a satellite-relative coordinate reference
-    frame with respect to each centroid location.
-
-    https://ceres.larc.nasa.gov/documents/ATBD/pdf/r2_2/ceres-atbd2.2-s4.4.pdf
-
-    See figure 4.4-2 in the ATBD for more details.
-
-    Data required to be already in the provided FG1D (all in degrees)
-    ("lat", "lon", "nadir_lat", "nadir_lon")
-
-    Keys added to the provided FG1D:
-    "x_sat", "y_sat", "z_sat", ## normed satellite geodetic vector
-    "x_cen", "y_cen", "z_cen", ## normed centroid geodetic vector
-    "x_s2c", "y_s2c", "z_s2c", ## normed satellite to centroid reference frame
-    """
-
-    ## (N, 3) vector of centroid geodetic vectors with features (x,y,z)
-    v_cen = np.stack([
-        np.sin(np.deg2rad(lat)) * np.cos(np.deg2rad(lon)),
-        np.sin(np.deg2rad(lat)) * np.sin(np.deg2rad(lon)),
-        np.cos(np.deg2rad(lat)),
-        ], axis=-1)
-    ## (N, 3) vector of satellite geodetic vectors with features (x,y,z)
-    v_sat = np.stack([
-        np.sin(np.deg2rad(nadir_lat)) * np.cos(np.deg2rad(nadir_lon)),
-        np.sin(np.deg2rad(nadir_lat)) * np.sin(np.deg2rad(nadir_lon)),
-        np.cos(np.deg2rad(nadir_lat)),
-        ], axis=-1)
-
-    ## Slant path length to centroid
-    rho = np.sqrt((r_E+h)**2 + r_E**2 - 2*r_E*(r_E+h)*np.sum(v_cen*v_sat))
-    ## satellite to centroid
-    v_Y = (r_E*v_cen - (r_E+h)*v_sat)/rho
-    ## right of scan direction
-    v_X = np.cross(v_Y, v_sat, axisa=-1, axisb=-1)
-    v_X /= np.stack(
-            [np.linalg.norm(v_X, axis=-1) for i in range(3)],
-            axis=-1)
-    ## opposite of scan direction
-    v_Z = np.cross(v_X, v_Y, axisa=-1, axisb=-1)
-    ## (N,9) array for the scan-relative coordinates
-    vv_s2c = np.concatenate((v_X, v_Y, v_Z), axis=-1)
-
-    return v_cen, v_sat, vv_s2c
-
 def get_ceres_swaths(
         ceres_nc_file:Path, drop_fields:list=[], reject_if_nan:list=[],
         ub_sza=180., ub_vza=90., lb_swath_interval=300, ub_swath_interval=1500,
-        ):
+        debug=False):
     """
-    This method subsumes
+    This method extracts data from a CERES SSF netCDF file acquired from:
+
+    The LARC Downloader: https://ceres-tool.larc.nasa.gov/ord-tool/
+
+    returns a list of FG1D objects corresponding to individual overpasses.
+
+    This method's responsibilities:
+
+    1. Delete unneeded fields listed in drop_fields.
+    2. Swap julian calendar for epoch seconds.
+    3. Mask out night time footprints and those outside the VZA range (FOV).
+    4. Drop footprints with invalid critical fields listed in reject_if_nan.
+    5. Calculate viewing geometry and add the new info to the dataset.
+    6. Split all footprints into overpasses based on their acquisition time.
+
+    :@param ceres_nc_file:LARC CERES SSF file to parse.
+    :@param drop_fields: By default, this method extracts all of the fields
+        in ceres_label_mapping, but if the 'new' keys of valid fields are
+        provided here, they won't be included in the returned footprints.
+    :@param reject_if_nan: Fields that must be a valid number, or else
+        footprints with NaN values are dropped.
+    :@param ub_sza: Upper bound on sza to restrict daytime pixels
+    :@param ub_vza: Upper bound on viewing zenith angle (MODIS FOV is like 45)
+    :@param lb_swath_interval: Minimum amount of time between swaths (sec)
+    :@param ub_swath_interval: Maximum amount of time included in a swath (sec)
+
     """
     ceres = FG1D(*parse_ceres(ceres_nc_file))
-    ## process only one CERES order as a FG1D object.
-    #ceres = FG1D(*parse_ceres(cf))
 
     ## Remove unneeded fields
     for df in drop_fields:
@@ -210,10 +180,12 @@ def get_ceres_swaths(
                      np.amax(ceres.data("lon"))),
         })
 
-    print("footprints, features, days:",
-          *ceres.data().shape,
-          np.unique(np.round(ceres.data('jday'))).size
-          )
+    if debug:
+        print(f"\nParsing file: {ceres_nc_file}")
+        print("footprints, features, days:",
+              *ceres.data().shape,
+              np.unique(np.round(ceres.data('jday'))).size
+              )
 
     ## Convert julian days to epochs and replace them as a feature
     epoch = np.array([
@@ -228,54 +200,37 @@ def get_ceres_swaths(
     ## Limit the FoV to prevent problems with panoramic distortion
     ceres = ceres.mask(ceres.data("vza")<=ub_vza)
 
-
     ## NaN values are marked in the SSF files with values >1e35
-    is_valid = lambda X: X < 1e30
+    is_valid = lambda X: np.logical_and(X<1e30, np.logical_not(np.isnan(X)))
 
-    ## Drop all features that must be valid (radiative fluxes)
-    ## Cloud, aerosol and surface type features may still have nan (>1e35)
-    ## values, which should be dealt with by the user.
+    """
+    Add the following 15 quantities as features:
+    (N,3) satellite's equatorial coordinate position at each observation
+    (N,3) centroids' equatorial coordinate positions
+    (N,9) sat-to-centroid relative vectors in the equatorial reference frame
+    """
+    geom_labels,geom_data = get_sensor_pixel_geometry(
+            nadir_lat=90-ceres.data("ndr_colat"),
+            nadir_lon=ceres.data("ndr_lon"),
+            obsv_lat=ceres.data("lat"),
+            obsv_lon=ceres.data("lon"),
+            sensor_altitude=705., ## EOS altitude per ATBD subsection 4.4
+            earth_radius=6367., ## Earth radius also per the ATBD
+            return_labels=True
+            )
+    for i,l in enumerate(geom_labels):
+        ceres.add_data(l, geom_data[:,i])
+
+    """
+    Drop all features that must be valid (radiative fluxes)
+    Cloud, aerosol and surface type features may still have nan (>1e35)
+    values, which should be dealt with by the user. Also, geometry values
+    must be valid (sometimes geolocation fails for some reason.
+    """
     ## In the future, FeatureGrid should support generating boolean masks
     ## for those features that are stored by default alongside the array.
     for l in reject_if_nan:
         ceres = ceres.mask(is_valid(ceres.data(l)))
-
-    ## Check the ratio of masked/unmasked values for each feature
-    #'''
-    for l in ceres.labels:
-        valid_counts = np.sum((is_valid(ceres.data(l))).astype(int))
-        print(l, valid_counts/ceres.size)
-    #'''
-
-    v_sat, v_cen, vv_s2c = get_view_angles(
-            lat=ceres.data("lat"),
-            lon=ceres.data("lon"),
-            nadir_lat=ceres.data("nadir_lat"),
-            nadir_lon=ceres.data("nadir_lon"),
-            )
-
-    ## Geodetic satellite position
-    ceres.add_data("x_sat", v_sat[:,0])
-    ceres.add_data("y_sat", v_sat[:,1])
-    ceres.add_data("z_sat", v_sat[:,2])
-
-    ## Geodetic centroid position
-    ceres.add_data("x_cen", v_cen[:,0])
-    ceres.add_data("y_cen", v_cen[:,1])
-    ceres.add_data("z_cen", v_cen[:,2])
-
-    ## New satellite to centroid coordinate reference frame
-    ceres.add_data("xx_s2c", vv_s2c[:,0])
-    ceres.add_data("xy_s2c", vv_s2c[:,1])
-    ceres.add_data("xz_s2c", vv_s2c[:,2])
-
-    ceres.add_data("yx_s2c", vv_s2c[:,3])
-    ceres.add_data("yy_s2c", vv_s2c[:,4])
-    ceres.add_data("yz_s2c", vv_s2c[:,5])
-
-    ceres.add_data("zx_s2c", vv_s2c[:,6])
-    ceres.add_data("zy_s2c", vv_s2c[:,7])
-    ceres.add_data("zz_s2c", vv_s2c[:,8])
 
     ## Split footprints into individual swaths based on acquisition time.
     ## >5 minutes almost certainly means it's a different swath. This was
@@ -284,6 +239,14 @@ def get_ceres_swaths(
     tmask = np.concatenate((np.array([True]), np.diff(
         ceres.data("epoch"))>lb_swath_interval))
     approx_times = ceres.data("epoch")[tmask]
+
+    ## Check the ratio of masked/unmasked values for each feature
+    #'''
+    if debug:
+        print(f"Percent valid footprints per field:")
+        for l in ceres.labels:
+            valid_counts = np.sum((is_valid(ceres.data(l))).astype(int))
+            print(f"{valid_counts/ceres.size:3.4f} {l}")
 
     ## Look for anything with a stime offset < (lb_swath_interval * 3)
     swaths = []
@@ -295,64 +258,87 @@ def get_ceres_swaths(
 
 
 if __name__=="__main__":
+    debug = True
     data_dir = Path("data")
     #data_dir = Path("/rstor/mdodson/aes690final/ceres")
-    ceres_nc_dir = data_dir.joinpath("ceres") ## directory of netCDFs from LARC
-    ## Directory containing pickles corresponding to lists of swath FGs
-    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
-    ## Upper bound on sza to restrict daytime pixels
-    #ub_sza = 75
-    ## Upper bound on viewing zenith angle (MODIS FOV is like 45)
-    #ub_vza = 30
-    ## minimum amount of time between swaths (sec)
-    #lb_swath_interval = 300
-    ## maximum amount of time included in a swath (sec)
-    #ub_swath_interval = lb_swath_interval*5
-    ## The easiest way to convert from julian is wrt a specific reference day.
 
-    ## netCDF from https://ceres-tool.larc.nasa.gov/ord-tool/
-    region_label = "idn"
-    region_files = [
-            f for f in ceres_nc_dir.iterdir()
-            if (f.suffix == ".nc" and region_label in f.stem)
-            ]
+    ## directory of netCDFs from https://ceres-tool.larc.nasa.gov/ord-tool/
+    ceres_nc_dir = data_dir.joinpath("ceres")
+    ## directory to dump pickles corresponding to lists of swath FGs
+    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
+
+    ## (!!!) Region label used to identify files to parse (!!!)
+    region_label = "azn"
+    #region_label = "neus"
+    #region_label = "idn"
+    #region_label = "hkh"
 
     ## Minimum number of valid footprints that warrant storing a swath
     min_footprints = 50
-    """
-    Preprocessing steps below:
+    drop_fields = ( ## Currently ignoring less prominent components
+        "id_s5", "id_s6", "id_s7", "id_s8",
+        "pct_s5", "pct_s6", "pct_s7", "pct_s8",
+        )
+    ## Fields that must be valid for a footprint to be maintained
+    reject_if_nan = (
+            "swflux", "wnflux", "lwflux",
+            "x_sat", "y_sat", "z_sat",
+            "x_cen", "y_cen", "z_cen",
+            "xx_s2c", "xy_s2c", "xz_s2c",
+            "yx_s2c", "yy_s2c", "yz_s2c",
+            "zx_s2c", "zy_s2c", "zz_s2c",
+            )
 
-    1. Delete unneeded fields listed in drop_fields.
-    2. Swap julian calendar for epoch seconds.
-    3. Mask out night time footprints and those outside the VZA range (FOV).
-    4. Drop footprints with invalid critical fields listed in reject_if_nan.
-    5. Calculate viewing geometry and add the new info to the dataset.
-    6. Split all footprints into overpasses based on their acquisition time.
-    """
+    ub_sza = 75. ## upper bound for solar zenith of valid footprints
+    ub_vza = 30. ## upper bound for solar zenith of valid footprints
 
+    ## Parse the CERES files into lists of FG1D objects, each corresponding
+    ## to a single satellite overpass' CERES footprints within the region.
+    region_files = [f for f in ceres_nc_dir.iterdir()
+                    if (f.suffix == ".nc" and region_label in f.stem)]
     for ceres_file in region_files:
         swaths_pkl = swath_pkl_dir.joinpath(f"{ceres_file.stem}.pkl")
         swaths = get_ceres_swaths(
                 ceres_nc_file=ceres_file,
-                drop_fields=( ## Currently ignoring less prominent components
-                    "id_s5", "id_s6", "id_s7", "id_s8",
-                    "pct_s5", "pct_s6", "pct_s7", "pct_s8",
-                    ),
-                reject_if_nan=("swflux", "wnflux", "lwflux"),
-                ub_sza=75.,
-                ub_vza=30.,
+                drop_fields=drop_fields,
+                reject_if_nan=reject_if_nan,
+                ub_sza=ub_sza,
+                ub_vza=ub_vza,
+                debug=debug,
                 )
-
         swaths = list(filter(lambda s:s.size>min_footprints, swaths))
-        ### (!!!) Only take every 2nd swath (!!!)
-        swaths = swaths[::2]
+
+        """
+        Optionally subset the swaths by a mod value. This will sparsely
+        sub-sample the data so that the full range of seasons is represented,
+        but fewer total swaths are extracted.
+
+        Later on, consider sampling (mod 3)+1 or (mod 3)+2 indexed datasets
+        """
+        ### (!!!) Only take every 3rd swath (!!!)
+        swaths = swaths[::3]
+        swaths_subset_label = "_0mod3"
+        swaths_pkl = swaths_pkl.parent.joinpath(
+                swaths_pkl.stem + swaths_subset_label + ".pkl")
+
         ## Add the region key to all the meta dicts
         for s in swaths:
             s.meta.update(region=region_label)
 
-        print(f"Data source:      {ceres_file.name}")
-        print(f"Swaths acquired:  {len(swaths)}")
-        print(f"Avg # footprints: {np.mean([s.size for s in swaths]):.1f}")
+        if debug:
+            swath_stats = np.array([[[
+                np.nanmean(s.data(l)), np.std(s.data(l)), np.ptp(s.data(l))
+                ] for l in s.labels] for s in swaths])
+            swath_stats = np.average(swath_stats, axis=0)
+            for i,l in enumerate(s.labels):
+                print(f"{l}:"," ".join([
+                    f"mean:{swath_stats[...,i,0]:.3f}",
+                    f"stdev:{swath_stats[...,i,1]:.3f}",
+                    f"range:{swath_stats[...,i,2]:.3f}",
+                    ]))
+            print(f"Data source:      {ceres_file.name}")
+            print(f"Swaths acquired:  {len(swaths)}")
+            print(f"Avg # footprints: {np.mean([s.size for s in swaths]):.1f}")
 
         ## Keep all swaths with at least 50 footprints in range, and save as a
         ## list of 2-tuples like (labels:list[str], data:list[np.array])

@@ -132,7 +132,8 @@ def geo_scatter(ceres_fg1d:FG1D, clabel, xlabel="lat", ylabel="lon",
     """ """
     ps = {"xlabel":xlabel, "ylabel":ylabel, "marker_size":4,
           "cmap":"nipy_spectral", "text_size":12, "title":clabel,
-          "norm":None,"figsize":(12,12), "marker":"o", "cbar_shrink":1.}
+          "norm":None,"figsize":(12,12), "marker":"o", "cbar_shrink":1.,
+          "map_linewidth":2}
     plt.clf()
     ps.update(plot_spec)
     plt.rcParams.update({"font.size":ps["text_size"]})
@@ -148,10 +149,9 @@ def geo_scatter(ceres_fg1d:FG1D, clabel, xlabel="lat", ylabel="lon",
             ]
     ax.set_extent(bounds)
 
-    ax.add_feature(cfeature.LAND)
-    ax.add_feature(cfeature.LAKES)
-    ax.add_feature(cfeature.RIVERS)
-    ax.coastlines()
+    ax.add_feature(cfeature.LAND, linewidth=ps.get("map_linewidth"))
+    ax.add_feature(cfeature.LAKES, linewidth=ps.get("map_linewidth"))
+    ax.add_feature(cfeature.RIVERS, linewidth=ps.get("map_linewidth"))
 
     ax.set_title(ps.get("title"))
     ax.set_xlabel(ps.get("xlabel"))
@@ -162,6 +162,11 @@ def geo_scatter(ceres_fg1d:FG1D, clabel, xlabel="lat", ylabel="lon",
                       transform=ccrs.PlateCarree(), zorder=100,
                       cmap=ps.get("cmap"), norm=ps.get("norm"),
                       marker=ps.get("marker"))
+    ax.add_feature(cfeature.BORDERS, linewidth=ps.get("map_linewidth"),
+                   zorder=120)
+    ax.add_feature(cfeature.STATES, linewidth=ps.get("map_linewidth"),
+                   zorder=120)
+    ax.coastlines()
     fig.colorbar(scat, ax=ax, shrink=ps.get("cbar_shrink"))
 
     if not fig_path is None:
@@ -240,7 +245,7 @@ def interp_1d_to_geo_grid(
 
 if __name__=="__main__":
     swaths_pkl = Path(
-            "data/ceres_swaths/ceres-ssf_hk_aqua_20180101-20201231.pkl")
+            "data/ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl")
             #"data/ceres_swaths/ceres-ssf_hk_terra_20180101-20201231.pkl")
     fig_dir = Path("figures/ceres")
     ceres_swaths =  [FG1D(*s) for s in pkl.load(swaths_pkl.open("rb"))]
