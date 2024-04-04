@@ -1,5 +1,8 @@
 import shlex
 from subprocess import Popen, PIPE
+from pathlib import Path
+from datetime import datetime as dt
+import requests
 
 def download(target_url:str, dest_dir:Path, raw_token:str=None,
              token_file:Path=None, replace:bool=False, debug=False):

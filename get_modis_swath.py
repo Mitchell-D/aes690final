@@ -17,6 +17,7 @@ import h5py
 #from krttdkit.acquire import modis
 #from krttdkit.acquire import laads
 
+import acquire
 from FG1D import FG1D
 from FeatureGridV2 import FeatureGridV2 as FG
 import modis_rsrs
@@ -373,18 +374,19 @@ if __name__=="__main__":
     ## which should contain a list of FG1D-style tuples.
     #swaths_pkl = data_dir.joinpath(
     swaths_pkls = [
-            "ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl",
+            #"ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl",
             #"ceres-ssf_azn_terra_20180101-20201231_0mod3.pkl",
             #"ceres-ssf_hkh_aqua_20180101-20201231_0mod3.pkl",
             #"ceres-ssf_hkh_terra_20180101-20201231_0mod3.pkl",
-            "ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl",
+            #"ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl",
             #"ceres-ssf_idn_aqua_20200916-20201231_0mod3.pkl",
             #"ceres-ssf_idn_terra_20180101-20200815_0mod3.pkl",
             #"ceres-ssf_idn_terra_20200816-20201231_0mod3.pkl",
-            "ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl",
+            #"ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl",
             #"ceres-ssf_neus_aqua_20201129-20201231_0mod3.pkl",
             #"ceres-ssf_neus_terra_20180101-20201112_0mod3.pkl",
             #"ceres-ssf_neus_terra_20201112-20201231_0mod3.pkl",
+            "ceres_hkh_terra.nc",
             ]
 
     swaths_pkls = list(map(lambda p: ceres_swath_dir.joinpath(p), swaths_pkls))
@@ -404,7 +406,7 @@ if __name__=="__main__":
     ## lat,lon preset for seus
     #bbox = ((28,38), (-95,-75))
     workers = 4
-    rng_seed = 200007221752
+    rng_seed = 207221752
     keep_netcdfs = False
     """  --( ------------- )--  """
 
