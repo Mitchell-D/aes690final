@@ -2,7 +2,24 @@ import shlex
 from subprocess import Popen, PIPE
 from pathlib import Path
 from datetime import datetime as dt
+import json
 import requests
+
+laads_root = "https://ladsweb.modaps.eosdis.nasa.gov"
+api_root = laads_root+"/api/v2"
+
+def parse_modis_time(fpath:Path):
+    """
+    Use the VIIRS standard file naming scheme (for the MODAPS DAAC, at least)
+    to parse the acquisition time of a viirs file.
+
+    Typical files look like: VJ102IMG.A2022203.0000.002.2022203070756.nc
+     - Field 1:     Satellite, data, and band type
+     - Field 2,3:   Acquisition time like A%Y%j.%H%M
+     - Field 4:     Collection (001 for Suomi NPP, 002 for JPSS-1)
+     - Field 5:     File creation time like %Y%m%d%H%M
+    """
+    return dt.strptime("".join(fpath.name.split(".")[1:3]), "A%Y%j%H%M")
 
 def download(target_url:str, dest_dir:Path, raw_token:str=None,
              token_file:Path=None, replace:bool=False, debug=False):
@@ -41,8 +58,6 @@ def download(target_url:str, dest_dir:Path, raw_token:str=None,
     stdout, stderr = Popen(
             shlex.split(command), stdout=PIPE, stderr=PIPE
             ).communicate()
-    if stderr:
-        print(stderr)
     return dest_path
 
 def query_modis_l1b(product_key:str, start_time:dt, end_time:dt,
@@ -70,11 +85,11 @@ def query_modis_l1b(product_key:str, start_time:dt, end_time:dt,
             download link of the geolocation file for the granule.
     """
     valid = {"MOD021KM", "MYD021KM", "MOD02QKM", "MYD02QKM",
-             "MOD02HKM", "MYD02HKM"}
+             "MOD02HKM", "MYD02HKM", "MOD03", "MYD03"}
     if product_key not in valid:
         raise ValueError(f"Product key must be one of: {valid}")
 
-    products = laads.query_product(product_key, start_time, end_time, latlon,
+    products = query_product(product_key, start_time, end_time, latlon,
                                    archive=archive, debug=debug)
     for i in range(len(products)):
         products[i].update({"atime":parse_modis_time(Path(

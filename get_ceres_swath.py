@@ -268,10 +268,10 @@ if __name__=="__main__":
     swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
 
     ## (!!!) Region label used to identify files to parse (!!!)
-    #region_label = "azn"
+    region_label = "azn"
     #region_label = "neus"
     #region_label = "idn"
-    region_label = "hkh"
+    #region_label = "hkh"
 
     ## Minimum number of valid footprints that warrant storing a swath
     min_footprints = 50
