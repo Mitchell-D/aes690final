@@ -188,6 +188,8 @@ def get_ceres_swaths(
               )
 
     ## Convert julian days to epochs and replace them as a feature
+    ## Some CERES footprints occasionally have 0 julian time
+    ceres = ceres.mask(ceres.data("jday")>=1)
     epoch = np.array([
         jday_to_epoch(jday)
         for jday in ceres.data("jday")
@@ -268,10 +270,12 @@ if __name__=="__main__":
     swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
 
     ## (!!!) Region label used to identify files to parse (!!!)
-    region_label = "azn"
+    #region_label = "azn"
     #region_label = "neus"
     #region_label = "idn"
     #region_label = "hkh"
+    #region_label = "seus"
+    region_label = "alk"
 
     ## Minimum number of valid footprints that warrant storing a swath
     min_footprints = 50

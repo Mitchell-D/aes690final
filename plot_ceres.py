@@ -245,14 +245,16 @@ def interp_1d_to_geo_grid(
 
 if __name__=="__main__":
     swaths_pkl = Path(
-            "data/ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl")
-            #"data/ceres_swaths/ceres-ssf_hk_terra_20180101-20201231.pkl")
+            #"data/ceres_swaths/ceres-ssf_ord1_aqua_20180101-20191231_0mod3.pkl")
+            "data/ceres_swaths/ceres-ssf_ord2_aqua_20180101-20201231_0mod3.pkl")
+            #"data/ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl")
     fig_dir = Path("figures/ceres")
     ceres_swaths =  [FG1D(*s) for s in pkl.load(swaths_pkl.open("rb"))]
 
-    #print(fg.labels)
-    #print(enh.array_stat(fg.data()))
+    print(ceres_swaths[0].labels)
+    print(ceres_swaths[0].meta)
 
+    exit(0)
 
     ## Interpolate the CERES footprints of random swaths onto a geographic grid
     seed = 2023

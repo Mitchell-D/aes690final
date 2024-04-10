@@ -3,9 +3,11 @@ import pickle as pkl
 import h5py
 import json
 import matplotlib.pyplot as plt
+
 from pathlib import Path
 from datetime import datetime
 from multiprocessing import Pool
+from pprint import pprint as ppt
 
 from krttdkit.operate import enhance as enh
 from krttdkit.visualize import guitools as gt
@@ -32,34 +34,22 @@ def gaussnorm(X,contrast=None):
     return np.clip(X, -contrast, contrast)
 
 if __name__=="__main__":
-    #swaths_pkl = Path("data/combined_swaths/swath_neus_aqua_20180801-1744.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_hkh_aqua_20180105-0748.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_neus_aqua_20190426-1807.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_idn_aqua_20190224-0516.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_idn_aqua_20191118-0458.h5")
-
-    #swaths_pkl = Path("data/combined_swaths/swath_idn_aqua_20191118-0458.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_idn_aqua_20200401-0504.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_azn_aqua_20200229-1814.h5")
-    swaths_pkl = Path("data/combined_swaths/swath_azn_aqua_20180311-1814.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_hkh_aqua_20180525-0813.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_hkh_aqua_20200514-0813.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_idn_aqua_20191118-0458.h5")
-    #swaths_pkl = Path("data/combined_swaths/swath_neus_terra_20201128-1551.h5")
+    swath_dir = Path("data/swaths")
     fig_dir = Path("figures/swaths")
 
-    swath = h5py.File(swaths_pkl.open("rb"), "r")["data"]
+    swath_paths = list(swath_dir.iterdir())
 
-    modis = FeatureGridV2(
-            data=swath["modis"][...],
-            **json.loads(swath.attrs["modis"])
-            )
-    ceres = FG1D(
-            data=swath["ceres"][...],
-            **json.loads(swath.attrs["ceres"])
-            )
+    swath = h5py.File(swath_paths.pop(0).open("rb"), "r")["data"]
 
-    #'''
+    modis_info = json.loads(swath.attrs["modis"])
+    ceres_info = json.loads(swath.attrs["ceres"])
+    modis = FeatureGridV2(data=swath["modis"][...], **modis_info)
+    ceres = FG1D(data=swath["ceres"][...], **ceres_info)
+
+    print(ceres_info)
+    print(modis_info)
+
+    '''
     timestr = datetime.fromtimestamp(
             int(np.average(ceres.data("epoch")))
             ).strftime("%Y-%m-%dT%H%M")
@@ -95,10 +85,12 @@ if __name__=="__main__":
             "cbar_shrink":.6,
             },
         )
-    #'''
+    '''
 
     print(modis.flabels)
     print(ceres.labels)
+
+    exit(0)
 
     m_lat = np.logical_or(
             modis.data("lat")<lat_range[0],
