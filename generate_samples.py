@@ -82,7 +82,7 @@ def gen_swaths_samples(
         ), tf.TensorSpec(shape=(len(ceres_pred),), dtype=tf.float64))
 
     def _gen_swath(swath_path):
-        #idx = swath_idx.numpy() ## decode EagerTensor
+        """ Generator for a single swath file """
         ## Determines the buffer size by assuming each chunk isn't much bigger
         ## than 1MB. There are probably better ways to tune this.
         f_swath = h5py.File(
@@ -105,6 +105,7 @@ def gen_swaths_samples(
 
         f_swath.close()
 
+        ## Randomly extract samples from the swath and snap them to
         rng = np.random.default_rng(seed=seed)
         idxs = np.arange(ceres.size)
         rng.shuffle(idxs)
@@ -113,6 +114,8 @@ def gen_swaths_samples(
         mlatlon = modis.data(("lat", "lon"))
         cen_latlon = ndsnap(clatlon, mlatlon)
 
+        ## Extract a modis_grid_size square around each centroid and make sure
+        ## the indeces are in bounds
         lb_latlon = np.transpose(np.array(cen_latlon) - int(modis_grid_size/2))
         ub_latlon = lb_latlon + modis_grid_size
         oob = np.any(np.logical_or(
@@ -123,20 +126,24 @@ def gen_swaths_samples(
         lb_latlon = np.delete(lb_latlon, np.where(oob), axis=0)
         ub_latlon = np.delete(ub_latlon, np.where(oob), axis=0)
 
+        ## Extract the geometry, ceres footprints, and full modis grid
         G = ceres.data(ceres_geom)[idxs]
         C = ceres.data(ceres_pred)[idxs]
         M = modis.data(modis_bands)
 
         print(swath_path.decode(), lb_latlon.shape[0])
         for i in range(lb_latlon.shape[0]):
+            ## Subset the modis grid for the current tile
             m = M[lb_latlon[i,0]:ub_latlon[i,0],lb_latlon[i,1]:ub_latlon[i,1]]
             yield ((tf.convert_to_tensor(m), tf.convert_to_tensor(G[i])),
                    tf.convert_to_tensor(C[i]))
 
+    ## Establish a dataset of swath paths to open in each generator
     swath_h5s = tf.data.Dataset.from_tensor_slices(
             list(map(lambda p:p.as_posix(), swath_h5s)),
             )
-
+    ## Open num_swath_procs hdf5s at a time and interleave their results,
+    ## consuming block_size training samples at each stage.
     D = swath_h5s.interleave(
             lambda fpath: tf.data.Dataset.from_generator(
                 generator=_gen_swath,

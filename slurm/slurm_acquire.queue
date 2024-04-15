@@ -25,8 +25,8 @@
 #SBATCH -J acq_modis
 
 ### SBATCH --open-mode=append ## Don't overwrite existing files
-#SBATCH -o /rhome/mdodson/aes690final/slurm/out/slurm_acquire-modis-3.out # STDOUT
-#SBATCH -e /rhome/mdodson/aes690final/slurm/out/slurm_acquire-modis-3.err # STDERR
+#SBATCH -o /rhome/mdodson/aes690final/slurm/out/slurm_acquire-modis-check.out # STDOUT
+#SBATCH -e /rhome/mdodson/aes690final/slurm/out/slurm_acquire-modis-check.err # STDERR
 
 #cd /rhome/mdodson/aes690final
 
