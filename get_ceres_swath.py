@@ -211,6 +211,8 @@ def get_ceres_swaths(
     (N,3) centroids' equatorial coordinate positions
     (N,9) sat-to-centroid relative vectors in the equatorial reference frame
     """
+    ## Now calculating point spread function only in generator
+    '''
     geom_labels,geom_data = get_sensor_pixel_geometry(
             nadir_lat=90-ceres.data("ndr_colat"), ## convert to lat
             nadir_lon=ceres.data("ndr_lon"), ## [0,360) from GM
@@ -222,6 +224,7 @@ def get_ceres_swaths(
             )
     for i,l in enumerate(geom_labels):
         ceres.add_data(l, geom_data[:,i])
+    '''
 
     """
     Drop all features that must be valid (radiative fluxes)
@@ -267,15 +270,17 @@ if __name__=="__main__":
     ## directory of netCDFs from https://ceres-tool.larc.nasa.gov/ord-tool/
     ceres_nc_dir = data_dir.joinpath("ceres")
     ## directory to dump pickles corresponding to lists of swath FGs
-    swath_pkl_dir =  data_dir.joinpath("ceres_swaths_test")
+    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
 
     ## (!!!) Region label used to identify files to parse (!!!)
-    #region_label = "azn"
-    region_label = "neus"
-    #region_label = "idn"
-    #region_label = "hkh"
-    #region_label = "seus"
-    #region_label = "alk"
+    region_labels = (
+            #"azn",
+            #"neus",
+            #"idn",
+            #"hkh",
+            "seus",
+            "alk",
+            )
 
     ## Minimum number of valid footprints that warrant storing a swath
     min_footprints = 50
@@ -286,11 +291,11 @@ if __name__=="__main__":
     ## Fields that must be valid for a footprint to be maintained
     reject_if_nan = (
             "swflux", "wnflux", "lwflux",
-            "x_sat", "y_sat", "z_sat",
-            "x_cen", "y_cen", "z_cen",
-            "xx_s2c", "xy_s2c", "xz_s2c",
-            "yx_s2c", "yy_s2c", "yz_s2c",
-            "zx_s2c", "zy_s2c", "zz_s2c",
+            #"x_sat", "y_sat", "z_sat",
+            #"x_cen", "y_cen", "z_cen",
+            #"xx_s2c", "xy_s2c", "xz_s2c",
+            #"yx_s2c", "yy_s2c", "yz_s2c",
+            #"zx_s2c", "zy_s2c", "zz_s2c",
             )
 
     ub_sza = 75. ## upper bound for solar zenith of valid footprints
@@ -298,9 +303,12 @@ if __name__=="__main__":
 
     ## Parse the CERES files into lists of FG1D objects, each corresponding
     ## to a single satellite overpass' CERES footprints within the region.
-    region_files = [f for f in ceres_nc_dir.iterdir()
-                    if (f.suffix == ".nc" and region_label in f.stem)]
+    region_files = [
+            f for f in ceres_nc_dir.iterdir()
+            if f.suffix == ".nc" and any(l in f.stem for l in region_labels)
+            ]
     for ceres_file in region_files:
+        rlabel = next(l for l in region_labels if l in ceres_file.stem)
         swaths_pkl = swath_pkl_dir.joinpath(f"{ceres_file.stem}.pkl")
         swaths = get_ceres_swaths(
                 ceres_nc_file=ceres_file,
@@ -327,7 +335,7 @@ if __name__=="__main__":
 
         ## Add the region key to all the meta dicts
         for s in swaths:
-            s.meta.update(region=region_label)
+            s.meta.update(region=rlabel)
 
         if debug:
             swath_stats = np.array([[[

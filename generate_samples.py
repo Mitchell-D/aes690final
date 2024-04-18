@@ -85,8 +85,9 @@ def _psf_conditionals(beta, delta):
     psf_in_fov = _psf_analytic(delta - d_f)
     psf_before_fov = psf_in_fov - _psf_analytic(delta + d_f)
     psf = np.where(delta<-1*d_f, psf_in_fov, psf_before_fov)
-    psf[abs_beta>2*a] = 0.
-    psf[delta<d_f] = 0.
+    psf[abs_beta>2*a] = 0#np.amin(psf)
+    psf[delta<d_f] = 0#np.amin(psf)
+    #psf[psf<0] = 0
     return psf
     '''
     if or delta<(d_f:=_delta_f(beta)):
@@ -98,6 +99,21 @@ def _psf_conditionals(beta, delta):
 
 def calc_psf(ceres_latlon, modis_latlon, subsat_latlon,
          sensor_altitude=705., earth_radius=6367.):
+    """
+    Calculate the CERES point spread function over a series of CERES centroids
+    associated with MODIS grid tiles, described by their lat/lon values and
+    those of the subsatellite (nadir) point.
+
+    :@param ceres_latlon: (B, 2) array of (lat,lon) points at B centroids
+    :@param modis_latlon: (B, L, L, 2) array of (lat,lon) points at B tiles
+        each consisting of a LxL grid of pixels which should coincide with
+        the corresponding CERES centroids.
+    :@param subsat_latlon: (B, 2) array of (lat,lon) points at B sub-satellite
+        instances corresponding to each of the CERES/MODIS observations.
+
+    :@return: (B, L, L, 3) array of (PSF, beta, delta) values associated with
+        the point spread function and angles calculated over the MODIS domain.
+    """
     ## Get equatorial vectors for the satellite, centroid, and imager pixel
     eq_sat = gu.get_equatorial_vectors( ## shape: (B, 3)
             latitude=subsat_latlon[...,0],
@@ -133,7 +149,10 @@ def calc_psf(ceres_latlon, modis_latlon, subsat_latlon,
     beta = np.rad2deg(np.arcsin(-1.*np.sum(tmp*CY, axis=-1)))
 
     ## Calculate the PSF over the domain
-    return _psf_conditionals(beta, delta)
+    ## (!!!) TODO: (!!!)
+    ## need to change delta based on Z' sign, which should be opposite scan dir
+    psf = _psf_conditionals(beta, delta+1.)
+    return np.stack((psf, beta, delta), axis=-1)
 
 def ndsnap(points, latlon):
     """
@@ -182,7 +201,7 @@ def gen_swaths_samples(
     ## output like ((modis, geometry, psf), ceres)
     modis_shape = (modis_grid_size, modis_grid_size, len(modis_bands))
     geom_shape = (len(ceres_geom),)
-    psf_shape = (modis_grid_size,modis_grid_size)
+    psf_shape = (modis_grid_size,modis_grid_size,3)
     ceres_shape = (len(ceres_pred),)
     out_sig = ((
         tf.TensorSpec(shape=modis_shape, dtype=tf.float64),
@@ -321,15 +340,15 @@ if __name__=="__main__":
     debug = False
     data_dir = Path("data")
     fig_dir = Path("figures")
-    modis_swath_dir = data_dir.joinpath("swaths_test")
+    modis_swath_dir = data_dir.joinpath("swaths")
 
     g = gen_swaths_samples(
             swath_h5s=[s for s in modis_swath_dir.iterdir()],
             buf_size_mb=512,
             modis_grid_size=48,
-            num_swath_procs=1,
-            samples_per_swath=32,
-            block_size=8,
+            num_swath_procs=3,
+            samples_per_swath=16,
+            block_size=2,
             modis_bands=None,
             ceres_pred=("swflux","lwflux"),
             ceres_geom=("sza", "vza", "raa"),
@@ -337,7 +356,10 @@ if __name__=="__main__":
     bidx = 0
     for ((m,g,p),c) in g.prefetch(2).batch(16):
         for i in range(p.shape[0]):
-            gt.quick_render(gt.scal_to_rgb(p[i]))
+            print(enh.array_stat(p.numpy()))
+            gt.quick_render(gt.scal_to_rgb(p[i,...,0]))
+            gt.quick_render(gt.scal_to_rgb(p[i,...,1]))
+            gt.quick_render(gt.scal_to_rgb(p[i,...,2]))
         exit(0)
         for j in range(c.shape[0]):
             cstr = "-".join([
