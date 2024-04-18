@@ -394,7 +394,7 @@ if __name__=="__main__":
             ]
 
     #bbox = ((28,38), (-95,-75))
-    workers = 8
+    workers = 7
     rng_seed = 200007221752
     keep_netcdfs = False
     """  --( ------------- )--  """
@@ -406,7 +406,7 @@ if __name__=="__main__":
     for p in swaths_pkls:
         ceres_swaths += [FG1D(*s) for s in pkl.load(p.open("rb"))]
     rng.shuffle(ceres_swaths)
-    ceres_swaths = ceres_swaths[:50]
+    #ceres_swaths = ceres_swaths[:50]
 
     """
     Search for MODIS L1b files on the LAADS DAAC that were acquired at the same

@@ -274,10 +274,10 @@ if __name__=="__main__":
 
     ## (!!!) Region label used to identify files to parse (!!!)
     region_labels = (
-            #"azn",
-            #"neus",
-            #"idn",
-            #"hkh",
+            "azn",
+            "neus",
+            "idn",
+            "hkh",
             "seus",
             "alk",
             )
