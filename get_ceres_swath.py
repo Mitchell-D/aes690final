@@ -212,8 +212,8 @@ def get_ceres_swaths(
     (N,9) sat-to-centroid relative vectors in the equatorial reference frame
     """
     geom_labels,geom_data = get_sensor_pixel_geometry(
-            nadir_lat=90-ceres.data("ndr_colat"),
-            nadir_lon=ceres.data("ndr_lon"),
+            nadir_lat=90-ceres.data("ndr_colat"), ## convert to lat
+            nadir_lon=ceres.data("ndr_lon"), ## [0,360) from GM
             obsv_lat=ceres.data("lat"),
             obsv_lon=ceres.data("lon"),
             sensor_altitude=705., ## EOS altitude per ATBD subsection 4.4
@@ -267,15 +267,15 @@ if __name__=="__main__":
     ## directory of netCDFs from https://ceres-tool.larc.nasa.gov/ord-tool/
     ceres_nc_dir = data_dir.joinpath("ceres")
     ## directory to dump pickles corresponding to lists of swath FGs
-    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
+    swath_pkl_dir =  data_dir.joinpath("ceres_swaths_test")
 
     ## (!!!) Region label used to identify files to parse (!!!)
     #region_label = "azn"
-    #region_label = "neus"
+    region_label = "neus"
     #region_label = "idn"
     #region_label = "hkh"
     #region_label = "seus"
-    region_label = "alk"
+    #region_label = "alk"
 
     ## Minimum number of valid footprints that warrant storing a swath
     min_footprints = 50

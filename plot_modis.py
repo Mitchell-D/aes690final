@@ -39,15 +39,18 @@ if __name__=="__main__":
 
     swath_paths = list(swath_dir.iterdir())
 
-    swath = h5py.File(swath_paths.pop(0).open("rb"), "r")["data"]
+    for i in range(len(swath_paths)):
+        swath = h5py.File(swath_paths.pop(0).open("rb"), "r")["data"]
 
-    modis_info = json.loads(swath.attrs["modis"])
-    ceres_info = json.loads(swath.attrs["ceres"])
-    modis = FeatureGridV2(data=swath["modis"][...], **modis_info)
-    ceres = FG1D(data=swath["ceres"][...], **ceres_info)
+        modis_info = json.loads(swath.attrs["modis"])
+        ceres_info = json.loads(swath.attrs["ceres"])
+        modis = FeatureGridV2(data=swath["modis"][...], **modis_info)
+        ceres = FG1D(data=swath["ceres"][...], **ceres_info)
 
-    print(ceres_info)
-    print(modis_info)
+        print(enh.array_stat(ceres.data("lon")))
+        print(enh.array_stat(ceres.data("ndr_lon")))
+        print()
+    exit(0)
 
     '''
     timestr = datetime.fromtimestamp(

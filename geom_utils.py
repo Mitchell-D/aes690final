@@ -23,7 +23,8 @@ def get_equatorial_vectors(latitude, longitude):
         ], axis=-1)
 
 def get_view_vectors(sensor_equatorial_vectors, pixel_equatorial_vectors,
-                     sensor_altitude, earth_radius=6367., return_labels=False):
+                     sensor_altitude=705., earth_radius=6367.,
+                     return_labels=False):
     """
     Use uniformly-shaped (..., 3) sensor and (...,3) pixel equatorial
     coordinate vector arrays corresponding to each observed point to calculate
@@ -60,7 +61,8 @@ def get_view_vectors(sensor_equatorial_vectors, pixel_equatorial_vectors,
     v_cen = pixel_equatorial_vectors
 
     ## Slant path length to centroid
-    rho = np.sqrt((r_E+h)**2 + r_E**2 - 2*r_E*(r_E+h)*np.sum(v_cen*v_sat))
+    rho = np.sqrt((r_E+h)**2 + r_E**2 - \
+            2*r_E*(r_E+h)*np.sum(v_cen*v_sat, axis=-1))[...,np.newaxis]
     ## satellite to centroid
     v_Y = (r_E*v_cen - (r_E+h)*v_sat)/rho
     ## right of scan direction
@@ -78,7 +80,7 @@ def get_view_vectors(sensor_equatorial_vectors, pixel_equatorial_vectors,
     return vv_s2c
 
 def get_sensor_pixel_geometry(
-        nadir_lat, nadir_lon, obsv_lat, obsv_lon, sensor_altitude,
+        nadir_lat, nadir_lon, obsv_lat, obsv_lon, sensor_altitude=705.,
         earth_radius=6367., return_labels=False):
     """
     Given the sub-satellite latitude and longitude as well as the centroid
@@ -100,6 +102,7 @@ def get_sensor_pixel_geometry(
             sensor_equatorial_vectors=v_sat,
             pixel_equatorial_vectors=v_cen,
             return_labels=return_labels,
+            earth_radius=earth_radius,
             sensor_altitude=sensor_altitude,
             )
     if not return_labels:
