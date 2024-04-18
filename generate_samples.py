@@ -1,5 +1,6 @@
 """  """
 #import gc
+import sys
 import random
 import numpy as np
 import h5py
@@ -36,45 +37,66 @@ psf_ceres_labels = ['x_sat', 'y_sat', 'z_sat',
                     'yx_s2c', 'yy_s2c', 'yz_s2c',
                     'zx_s2c', 'zy_s2c', 'zz_s2c']
 
-def psf(psf_ceres, modis_equatorial):
+'''
+def _delta_f(beta):
+    b = np.abs(beta)
+    if b<a:
+        return -a
+    elif b<2*a:
+        return -2*a + b
+    else:
+        raise ValueError("Condition should never be met; God help you")
+'''
+
+def _psf_analytic(xi):
     """
+    Analytic PSF function from CERES ATBD subsystem 4.4 eq 2
     """
+    ## analytic psf constants
+    a1 = 1.84205
+    a2 = -0.22502
+    b1 = 1.47034
+    b2 = 0.45904
+    c1 = 1.98412
+    t2exp = -6.35465
+    t2ang = 1.90282
+    t3exp = -4.61598
+    t3ang = 5.83072
 
-    print(psf_ceres.shape, modis_equatorial.shape)
-    ## Satellite equatorial vectors (B, 1, 1, 9)
-    sat_eq = psf_ceres[...,:3]
-    ## CERES satellite-relative viewing vectors (B, 1, 1, 9)
-    ceres_vv = psf_ceres[..., 6:]
-    modis_grid_shape = modis_equatorial.shape[:-1]
-    mod_eq = modis_equatorial.reshape((-1,modis_equatorial.shape[-1]))
+    term_1 = 1 - (1 + a1 + a2) * np.exp(-1 * c1 * xi)
+
+    term_2 = a1 * np.cos(np.deg2rad(t2ang * xi))
+    term_2 += b1 * np.sin(np.deg2rad(t2ang * xi))
+    term_2 *= np.exp(t2exp * xi)
+
+    term_3 = a2 * np.cos(np.deg2rad(t3ang * xi))
+    term_3 += b2 * np.sin(np.deg2rad(t3ang * xi))
+    term_3 *= np.exp(t3exp * xi)
+
+    return term_1 + term_2 + term_3
+
+def _psf_conditionals(beta, delta):
+    """
+    Conditional PSF function from ATBD subsystem 4.4 eq 1
+    """
+    a = .65 ## angular bound
+    abs_beta = np.abs(beta)
+    d_f = np.where(abs_beta<a, -1*a, -2*a+abs_beta)
+    psf_in_fov = _psf_analytic(delta - d_f)
+    psf_before_fov = psf_in_fov - _psf_analytic(delta + d_f)
+    psf = np.where(delta<-1*d_f, psf_in_fov, psf_before_fov)
+    psf[abs_beta>2*a] = 0.
+    psf[delta<d_f] = 0.
+    return psf
     '''
-    print(np.average(np.average(modis_equatorial, axis=1),axis=1)[0])
-    print(sat_eq[0])
-    print()
-    print(np.average(np.average(modis_equatorial, axis=1),axis=1)[1])
-    print(sat_eq[1])
-    print()
-    print(np.average(np.average(modis_equatorial, axis=1),axis=1)[2])
-    print(sat_eq[2])
-    print()
+    if or delta<(d_f:=_delta_f(beta)):
+        return 0
+    elif d_f <= delta < -1*d_f:
+        return _psf_analytic(delta - d_f)
+    return _psf_analytic(delta - d_f) - _psf_analytic(delta + d_f)
     '''
 
-    ## MODIS satellite-relative viewing vectors (B, L, L, 9)
-    modis_vv = gu.get_view_vectors(sat_eq, modis_equatorial)
-    #'''
-    print(ceres_vv.shape, modis_vv.shape)
-    print(np.average(np.average(modis_vv[0], axis=0), axis=0))
-    print(ceres_vv[0])
-    print()
-    print(np.average(np.average(modis_vv[3], axis=0), axis=0))
-    print(ceres_vv[3])
-    print()
-    print(np.average(np.average(modis_vv[6], axis=0), axis=0))
-    print(ceres_vv[6])
-    #'''
-    exit(0)
-
-def psf2(ceres_latlon, modis_latlon, subsat_latlon,
+def calc_psf(ceres_latlon, modis_latlon, subsat_latlon,
          sensor_altitude=705., earth_radius=6367.):
     ## Get equatorial vectors for the satellite, centroid, and imager pixel
     eq_sat = gu.get_equatorial_vectors( ## shape: (B, 3)
@@ -110,83 +132,8 @@ def psf2(ceres_latlon, modis_latlon, subsat_latlon,
     tmp /= np.linalg.norm(tmp, axis=-1, keepdims=True)
     beta = np.rad2deg(np.arcsin(-1.*np.sum(tmp*CY, axis=-1)))
 
-    a = .65 ## angular bounds
-    ## analytic psf constants
-    a1 = 1.84205
-    a2 = -0.22502
-    b1 = 1.47034
-    b2 = 0.45904
-    c1 = 1.98412
-    t2exp = -6.35465
-    t2ang = 1.90282
-    t3exp = -4.61598
-    t3ang = 5.83072
-
-    def _delta_f(beta):
-        b = np.abs(beta)
-        if b<a:
-            return -a
-        elif b<2*a:
-            return -2*a + b
-        else:
-            raise ValueError("Condition should never be met; God help you")
-    def _delta_b(beta):
-        b = np.abs(beta)
-        if b<a:
-            return a
-        elif b<2*a:
-            return 2*a - b
-        else:
-            raise ValueError("Condition should never be met; God help you")
-
-    def _psf_analytic(xi):
-        """
-        Analytic PSF function from CERES ATBD subsystem 4.4 eq 2
-        """
-        term_1 = 1 - (1 + a1 + a2) * np.exp(-1 * c1 * xi)
-
-        term_2 = a1 * np.cos(np.deg2rad(t2ang * xi))
-        term_2 += b1 * np.sin(np.deg2rad(t2ang * xi))
-        term_2 *= np.exp(t2exp * xi)
-
-        term_3 = a2 * np.cos(np.deg2rad(t3ang * xi))
-        term_3 += b2 * np.sin(np.deg2rad(t3ang * xi))
-        term_3 *= np.exp(t3exp * xi)
-
-        return term_1 + term_2 + term_3
-
-    def _psf_conditionals(beta, delta):
-        """
-        Conditional PSF function from ATBD subsystem 4.4 eq 1
-        """
-        if np.abs(beta)>2*a or delta<(d_f:=_delta_f(beta)):
-            return 0
-
-        elif
-
-        psf = np.zeros_like(beta)
-
-
-    for i in range(delta.shape[0]):
-        print(enh.array_stat(delta[i]))
-        print(enh.array_stat(beta[i]))
-        print()
-    exit(0)
-
-    '''
-    modis_geom = gu.get_sensor_pixel_geometry(
-            nadir_lat=subsat_latlon[...,0],
-            nadir_lon=subsat_latlon[...,1],
-            obsv_lat=modis_latlon[...,0],
-            obsv_lon=modis_latlon[...,1],
-            )
-    ceres_geom = gu.get_sensor_pixel_geometry(
-            nadir_lat=subsat_latlon[...,0],
-            nadir_lon=subsat_latlon[...,1],
-            obsv_lat=ceres_latlon[...,0],
-            obsv_lon=ceres_latlon[...,1],
-            )
-    '''
+    ## Calculate the PSF over the domain
+    return _psf_conditionals(beta, delta)
 
 def ndsnap(points, latlon):
     """
@@ -228,23 +175,26 @@ def gen_swaths_samples(
         block_size=32, ## Number of consecutive samples drawn per swath
         seed=None
         ):
-    """
-    """
-    #h5_path = swath_h5_dir.joinpath(
-    #        f"swath_{region_label}_{sat}_{timestr}.h5")
+    """ """
     if modis_bands == None:
         modis_bands = list(range(1,37))
 
+    ## output like ((modis, geometry, psf), ceres)
+    modis_shape = (modis_grid_size, modis_grid_size, len(modis_bands))
+    geom_shape = (len(ceres_geom),)
+    psf_shape = (modis_grid_size,modis_grid_size)
+    ceres_shape = (len(ceres_pred),)
     out_sig = ((
-        tf.TensorSpec(
-            shape=(modis_grid_size,modis_grid_size,len(modis_bands)),
-            dtype=tf.float64,
-            ),
-        tf.TensorSpec(shape=(len(ceres_geom),), dtype=tf.float64),
-        ), tf.TensorSpec(shape=(len(ceres_pred),), dtype=tf.float64))
+        tf.TensorSpec(shape=modis_shape, dtype=tf.float64),
+        tf.TensorSpec(shape=geom_shape, dtype=tf.float64),
+        tf.TensorSpec(shape=psf_shape, dtype=tf.float64),
+        ), tf.TensorSpec(shape=ceres_shape, dtype=tf.float64))
 
     def _gen_swath(swath_path):
         """ Generator for a single swath file """
+
+        """ loading all the data from the provided swath file """
+
         ## Determines the buffer size by assuming each chunk isn't much bigger
         ## than 1MB. There are probably better ways to tune this.
         f_swath = h5py.File(
@@ -255,17 +205,11 @@ def gen_swaths_samples(
                 )
         modis_dict = json.loads(f_swath["data"].attrs["modis"])
         ceres_dict = json.loads(f_swath["data"].attrs["ceres"])
-
-        ## Add new batch coordinate for (B,Q,Q,M) shaped MODIS grid batches
-        #modis_dict.update(clabels=("b", *modis_dict.get("clabels")))
-
-        modis = FG(
-                data=f_swath["/data/modis"][...],
-                **modis_dict
-                )
+        modis = FG(data=f_swath["/data/modis"][...], **modis_dict)
         ceres = FG1D(data=f_swath["/data/ceres"][...], **ceres_dict)
-
         f_swath.close()
+
+        """ choosing CERES centroids for this swath """
 
         ## Randomly extract a number of samples from the swath and snap them to
         ## the closest point in the MODIS grid in order to describe a subgrid.
@@ -276,6 +220,8 @@ def gen_swaths_samples(
         clatlon = ceres.data(("lat", "lon"))[idxs]
         mlatlon = modis.data(("lat", "lon"))
         cen_latlon = ndsnap(clatlon, mlatlon)
+
+        """ MODIS tile boundary identification """
 
         ## Extract a modis_grid_size square around each centroid
         ## and make sure the indeces are in bounds.
@@ -290,19 +236,20 @@ def gen_swaths_samples(
         lb_latlon = np.delete(lb_latlon, np.where(oob), axis=0)
         ub_latlon = np.delete(ub_latlon, np.where(oob), axis=0)
 
-        ## Extract the geometry, ceres footprints, and full modis grid
+        """ input data extraction """
+
+        ## Extract the viewing geometry and ceres footprints
         G = ceres.data(ceres_geom)[idxs]
         C = ceres.data(ceres_pred)[idxs]
-
-        PSF_GEOM_C = ceres.data(psf_ceres_labels)[idxs]
+        ## Make slices corresponding to each MODIS tile and extract the bands
         tile_slices = [
                 (slice(lb_latlon[i,0], ub_latlon[i,0]),
                  slice(lb_latlon[i,1], ub_latlon[i,1]))
                 for i in range(lb_latlon.shape[0])]
         M = modis.data(modis_bands)
         M = np.stack([M[*ts] for ts in tile_slices], axis=0)
-        PSF_GEOM_M = modis.data(psf_modis_labels)
-        PSF_GEOM_M = np.stack([PSF_GEOM_M[*ts] for ts in tile_slices], axis=0)
+
+        """ point spread function calculation """
 
         ## Convert CERES to longitude in [0,360)
         ceres_latlon = np.stack(
@@ -322,17 +269,23 @@ def gen_swaths_samples(
                  (modis.data("lon")+360.)%360.),
                 axis=-1)
         modis_latlon = np.stack(
-                [modis_latlon[*ts] for ts in tile_slices],axis=0)
-
-        PSF = psf2(
+                [modis_latlon[*ts] for ts in tile_slices],
+                axis=0)
+        PSF = calc_psf(
                 ceres_latlon=ceres_latlon,
                 modis_latlon=modis_latlon,
                 subsat_latlon=subsat_latlon,
                 )
-        exit(0)
+
+        """ yielding results """
+
+        print(G.shape, C.shape, M.shape, PSF.shape)
 
         for i in range(lb_latlon.shape[0]):
-            #psf(PSF_GEOM_C[i], PSF_GEOM_M[i])
+            X = tuple(map(tf.convert_to_tensor, (M[i], G[i], PSF[i])))
+            Y = tf.convert_to_tensor(C[i])
+            yield (X, Y)
+            '''
             exit(0)
             ## Subset the modis grid for the current tile
             m = M[lb_latlon[i,0]:ub_latlon[i,0],
@@ -344,6 +297,7 @@ def gen_swaths_samples(
 
             yield ((tf.convert_to_tensor(m), tf.convert_to_tensor(G[i])),
                    tf.convert_to_tensor(C[i]))
+            '''
 
     ## Establish a dataset of swath paths to open in each generator
     swath_h5s = tf.data.Dataset.from_tensor_slices(
@@ -372,7 +326,7 @@ if __name__=="__main__":
     g = gen_swaths_samples(
             swath_h5s=[s for s in modis_swath_dir.iterdir()],
             buf_size_mb=512,
-            modis_grid_size=32,
+            modis_grid_size=48,
             num_swath_procs=1,
             samples_per_swath=32,
             block_size=8,
@@ -381,7 +335,10 @@ if __name__=="__main__":
             ceres_geom=("sza", "vza", "raa"),
             )
     bidx = 0
-    for ((m,g),c) in g.prefetch(2).batch(16):
+    for ((m,g,p),c) in g.prefetch(2).batch(16):
+        for i in range(p.shape[0]):
+            gt.quick_render(gt.scal_to_rgb(p[i]))
+        exit(0)
         for j in range(c.shape[0]):
             cstr = "-".join([
                 f"{v:03}" for v in tuple(np.array(c[j]).astype(np.uint16))
