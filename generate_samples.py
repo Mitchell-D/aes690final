@@ -53,24 +53,24 @@ def _psf_analytic(xi):
     Analytic PSF function from CERES ATBD subsystem 4.4 eq 2
     """
     ## analytic psf constants
+    c1 = 1.98412
     a1 = 1.84205
     a2 = -0.22502
-    b1 = 1.47034
-    b2 = 0.45904
-    c1 = 1.98412
-    t2exp = -6.35465
-    t2ang = 1.90282
-    t3exp = -4.61598
-    t3ang = 5.83072
 
     term_1 = 1 - (1 + a1 + a2) * np.exp(-1 * c1 * xi)
 
-    term_2 = a1 * np.cos(np.deg2rad(t2ang * xi))
-    term_2 += b1 * np.sin(np.deg2rad(t2ang * xi))
+    b1 = 1.47034
+    t2exp = -6.35465
+    t2ang = 1.90282
+    term_2 = a1 * np.cos(t2ang * xi)
+    term_2 += b1 * np.sin(t2ang * xi)
     term_2 *= np.exp(t2exp * xi)
 
-    term_3 = a2 * np.cos(np.deg2rad(t3ang * xi))
-    term_3 += b2 * np.sin(np.deg2rad(t3ang * xi))
+    b2 = 0.45904
+    t3exp = -4.61598
+    t3ang = 5.83072
+    term_3 = a2 * np.cos(t3ang * xi)
+    term_3 += b2 * np.sin(t3ang * xi)
     term_3 *= np.exp(t3exp * xi)
 
     return term_1 + term_2 + term_3
@@ -81,11 +81,27 @@ def _psf_conditionals(beta, delta):
     """
     a = .65 ## angular bound
     abs_beta = np.abs(beta)
+
+    ## Describes the boundary of the hexagonal optical FOV
     d_f = np.where(abs_beta<a, -1*a, -2*a+abs_beta)
+    #d_b = np.where(abs_beta<a, a, 2*a-abs_beta)
+    ## PSF within the optical hexagonal boundary
+    #psf_in_fov = _psf_analytic(delta - d_f)
     psf_in_fov = _psf_analytic(delta - d_f)
+    ## Blurred PSF leading the optical hexagon
     psf_before_fov = psf_in_fov - _psf_analytic(delta + d_f)
+
+    ## Select PSF based on whether inside or prior to optical FOV
     psf = np.where(delta<-1*d_f, psf_in_fov, psf_before_fov)
+    #psf = np.where(delta<-1*d_f, -1, 1)
+    #psf = psf_before_fov
+    #psf = psf_in_fov
+    #psf = delta - d_f
+
+    #psf[psf<0] = 0
+    ## Mask out where cross-scan too wide
     psf[abs_beta>2*a] = 0#np.amin(psf)
+    ## Mask out after along-scan boundary
     psf[delta<d_f] = 0#np.amin(psf)
     #psf[psf<0] = 0
     return psf
@@ -151,7 +167,7 @@ def calc_psf(ceres_latlon, modis_latlon, subsat_latlon,
     ## Calculate the PSF over the domain
     ## (!!!) TODO: (!!!)
     ## need to change delta based on Z' sign, which should be opposite scan dir
-    psf = _psf_conditionals(beta, delta+1.)
+    psf = _psf_conditionals(beta, delta + .96)
     return np.stack((psf, beta, delta), axis=-1)
 
 def ndsnap(points, latlon):
@@ -356,7 +372,7 @@ if __name__=="__main__":
     bidx = 0
     for ((m,g,p),c) in g.prefetch(2).batch(16):
         for i in range(p.shape[0]):
-            print(enh.array_stat(p.numpy()))
+            print(enh.array_stat(p[i,...,0].numpy()))
             gt.quick_render(gt.scal_to_rgb(p[i,...,0]))
             gt.quick_render(gt.scal_to_rgb(p[i,...,1]))
             gt.quick_render(gt.scal_to_rgb(p[i,...,2]))

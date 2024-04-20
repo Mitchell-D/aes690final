@@ -244,17 +244,32 @@ def interp_1d_to_geo_grid(
                     method=interp_method), glat, glon
 
 if __name__=="__main__":
-    swaths_pkl = Path(
-            #"data/ceres_swaths/ceres-ssf_ord1_aqua_20180101-20191231_0mod3.pkl")
-            "data/ceres_swaths/ceres-ssf_ord2_aqua_20180101-20201231_0mod3.pkl")
-            #"data/ceres_swaths/ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl")
+    ceres_dir = Path("data/ceres_swaths")
+    ## aqua swaths are ascending; terra are descending
+    swaths_pkl = ceres_dir.joinpath(
+            #"ceres-ssf_alk_aqua_20180101-20191231_0mod3.pkl")
+            #"ceres-ssf_alk_aqua_20200101-20201231_0mod3.pkl")
+            "ceres-ssf_alk_terra_20180101-20191231_0mod3.pkl")
+            #"ceres-ssf_alk_terra_20200101-20201231_0mod3.pkl")
+            #"ceres-ssf_azn_aqua_20180101-20201231_0mod3.pkl")
+            #"ceres-ssf_azn_terra_20180101-20201231_0mod3.pkl")
+            #"ceres-ssf_hkh_aqua_20180101-20201231_0mod3.pkl")
+            #"ceres-ssf_hkh_terra_20180101-20201231_0mod3.pkl")
+            #"ceres-ssf_idn_aqua_20180101-20200916_0mod3.pkl")
+            #"ceres-ssf_idn_aqua_20200916-20201231_0mod3.pkl")
+            #"ceres-ssf_idn_terra_20180101-20200815_0mod3.pkl")
+            #"ceres-ssf_idn_terra_20200816-20201231_0mod3.pkl")
+            #"ceres-ssf_neus_aqua_20180101-20201129_0mod3.pkl")
+            #"ceres-ssf_neus_aqua_20201129-20201231_0mod3.pkl")
+            #"ceres-ssf_neus_terra_20180101-20201112_0mod3.pkl")
+            #"ceres-ssf_neus_terra_20201112-20201231_0mod3.pkl")
+            #"ceres-ssf_seus_aqua_20180101-20201231_0mod3.pkl")
+            #"ceres-ssf_seus_terra_20180101-20201231_0mod3.pkl")
     fig_dir = Path("figures/ceres")
     ceres_swaths =  [FG1D(*s) for s in pkl.load(swaths_pkl.open("rb"))]
 
     print(ceres_swaths[0].labels)
     print(ceres_swaths[0].meta)
-
-    exit(0)
 
     ## Interpolate the CERES footprints of random swaths onto a geographic grid
     seed = 2023
@@ -329,7 +344,8 @@ if __name__=="__main__":
         #'''
         geo_scatter(
                 ceres_fg1d=fg,
-                clabel="swflux",
+                #clabel="swflux",
+                clabel="epoch",
                 show=True,
                 #fig_path=fig_dir.joinpath(f"geo_scatter_{timestr}_swflux.png"),
                 plot_spec={
@@ -338,8 +354,11 @@ if __name__=="__main__":
                     "marker":",",
                     "text_size":16,
                     "cbar_shrink":.6,
+                    "cmap":"prism",
                     }
                 )
+
+        '''
         geo_scatter(
                 ceres_fg1d=fg,
                 clabel="lwflux",
@@ -353,6 +372,7 @@ if __name__=="__main__":
                     "cbar_shrink":.6,
                     },
                 )
+        '''
         #'''
 
         '''
