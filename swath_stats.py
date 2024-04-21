@@ -50,6 +50,17 @@ if __name__=="__main__":
     unique_regions = tuple(set(regions))
     unique_sats = tuple(set(satellites))
 
+    #'''
+    ## Print the number of valid swaths per region
+    region_counts = [
+            (y,np.count_nonzero(np.array([x==y for x in regions])))
+            for y in unique_regions
+            ]
+    for r,c in region_counts:
+        print(r,c)
+    exit(0)
+    #'''
+
     ## Make a data cube with dimensions for (sat, region, stat, datum)
     scube_shape = (len(unique_sats), len(unique_regions),
                    stats.shape[1], len(ceres_labels))
