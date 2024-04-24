@@ -77,40 +77,23 @@ def check_swath(swath_h5:Path, image_dir:Path=None,
             )
     return swath_info,ceres_stats,modis_stats,labels
 
-if __name__=="__main__":
-    debug = True
-    data_dir = Path("data")
-
-    ## directory where new MODIS and CERES swaths arrays are deposited
-    combined_swath_dir = data_dir.joinpath("swaths")
-    out_pkl = data_dir.joinpath("swath_info.pkl")
-
-    ## substring to constrain the swaths that are checked
-    substrings = (
-            "azn",
-            "neus",
-            "idn",
-            "hkh",
-            "seus",
-            "alk",
-            )
-    general_args = {
-            "image_dir":None,
-            "get_tc":False,
-            "get_dcp":False,
-            "get_dust":False,
-            }
-    workers = 23
-
-    ## multiprocess collecting stats for all the swaths
-    swath_h5s = list(filter(
-        lambda p:any(s in p.name for s in substrings),
-        combined_swath_dir.iterdir()
-        ))
-    mp_args = [{"swath_h5":s, **general_args} for s in swath_h5s]
-    swath_ids,ceres_stats,modis_stats = [],[],[]
-    def mp_check_swath(args):
+def mp_check_swath(args):
+    try:
         return check_swath(**args)
+    except:
+        print(f"FAILED: {args['swath_h5']}")
+
+def check_multiple(ceres_swaths:list, output_pkl:Path=None, workers=1,
+        image_dir=None, get_tc=False, get_dcp=False, get_dust=False):
+    """ multiprocess collecting stats for all the swaths """
+    mp_args = [{
+        "swath_h5":s,
+        "image_dir":image_dir,
+        "get_tc":get_tc,
+        "get_dcp":get_dcp,
+        "get_dust":get_dust,
+        } for s in ceres_swaths]
+    swath_ids,ceres_stats,modis_stats = [],[],[]
     with Pool(workers) as pool:
         for result in pool.imap_unordered(mp_check_swath, mp_args):
             swath_tuple,cstats,mstats,labels = result
@@ -120,4 +103,29 @@ if __name__=="__main__":
             print(f"Evaluated {swath_tuple}")
     ceres_stats = np.stack(ceres_stats, axis=0)
     modis_stats = np.stack(modis_stats, axis=0)
-    pkl.dump((swath_ids,ceres_stats,modis_stats,labels), out_pkl.open("wb"))
+    out_tuple = (swath_ids,ceres_stats,modis_stats,labels)
+    if not output_pkl is None:
+        pkl.dump(out_tuple, output_pkl.open("wb"))
+    return out_tuple
+
+if __name__=="__main__":
+    debug = True
+    data_dir = Path("data")
+    ## directory where existingswaths files are
+    #combined_swath_dir = data_dir.joinpath("swaths")
+    combined_swath_dir = data_dir.joinpath("swaths_val")
+    ## Path to a pickle file where swath-wise aggregate stats are placed
+    out_pkl = data_dir.joinpath("swath_info.pkl")
+
+    #'''
+    ## substring to constrain the swaths that are checked
+    substrings = ("azn", "neus", "idn", "hkh", "seus", "alk",)
+    swath_h5s = list(filter(
+        lambda p:any(s in p.name for s in substrings),
+        combined_swath_dir.iterdir()))
+    check_multiple(
+            ceres_swaths=swath_h5s,
+            output_pkl=out_pkl,
+            workers=23,
+            )
+    #'''
