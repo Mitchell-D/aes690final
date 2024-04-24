@@ -348,9 +348,10 @@ if __name__=="__main__":
     data_dir = Path("data")
     modis_nc_dir = data_dir.joinpath("modis")
     ## Directory where already-generated CERES swaths pkls are retrieved
-    ceres_swath_dir = data_dir.joinpath("ceres_swaths")
+    #ceres_swath_dir = data_dir.joinpath("ceres_swaths")
+    ceres_swath_dir = data_dir.joinpath("ceres_swaths_val")
     ## Directory where new MODIS and CERES swaths arrays are deposited
-    combined_swath_dir = data_dir.joinpath("swaths")
+    combined_swath_dir = data_dir.joinpath("swaths_val")
 
     """
     Generate a API download  token with an EarthData account here:

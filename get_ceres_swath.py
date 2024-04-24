@@ -270,7 +270,7 @@ if __name__=="__main__":
     ## directory of netCDFs from https://ceres-tool.larc.nasa.gov/ord-tool/
     ceres_nc_dir = data_dir.joinpath("ceres")
     ## directory to dump pickles corresponding to lists of swath FGs
-    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
+    swath_pkl_dir =  data_dir.joinpath("ceres_swaths_val")
 
     ## (!!!) Region label used to identify files to parse (!!!)
     region_labels = (
@@ -303,10 +303,10 @@ if __name__=="__main__":
 
     ## Parse the CERES files into lists of FG1D objects, each corresponding
     ## to a single satellite overpass' CERES footprints within the region.
-    region_files = [
+    region_files = sorted([
             f for f in ceres_nc_dir.iterdir()
             if f.suffix == ".nc" and any(l in f.stem for l in region_labels)
-            ]
+            ])
     for ceres_file in region_files:
         rlabel = next(l for l in region_labels if l in ceres_file.stem)
         swaths_pkl = swath_pkl_dir.joinpath(f"{ceres_file.stem}.pkl")
@@ -328,8 +328,8 @@ if __name__=="__main__":
         Later on, consider sampling (mod 3)+1 or (mod 3)+2 indexed datasets
         """
         ### (!!!) Only take every 3rd swath (!!!)
-        swaths = swaths[::3]
-        swaths_subset_label = "_0mod3"
+        swaths = swaths[2::3]
+        swaths_subset_label = "_2mod3"
         swaths_pkl = swaths_pkl.parent.joinpath(
                 swaths_pkl.stem + swaths_subset_label + ".pkl")
 

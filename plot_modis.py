@@ -44,6 +44,9 @@ if __name__=="__main__":
 
         modis_info = json.loads(swath.attrs["modis"])
         ceres_info = json.loads(swath.attrs["ceres"])
+        print(modis_info.keys())
+        print(ceres_info.keys())
+        exit(0)
         modis = FeatureGridV2(data=swath["modis"][...], **modis_info)
         ceres = FG1D(data=swath["ceres"][...], **ceres_info)
 
@@ -142,6 +145,7 @@ if __name__=="__main__":
     #'''
 
     #'''
+    ## dust
     gamma = .4
     rgb = np.stack([
             gaussnorm((modis.data(32)-modis.data(31)),
