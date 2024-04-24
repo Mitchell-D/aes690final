@@ -15,7 +15,8 @@ if __name__=="__main__":
     swath_stats = []
     ceres_labels = None
 
-    #'''
+    '''
+    ## Extract bulk statistics region-wise
     for p in swath_dir.iterdir():
         print(p.name)
         swath = h5py.File(p.open("rb"), "r")["data"]
@@ -40,34 +41,50 @@ if __name__=="__main__":
     stats = np.stack(stats, axis=0)
     pkl.dump((ceres_labels, satellites, regions, stats), pkl_path.open("wb"))
     exit(0)
-    #'''
+    '''
 
     #'''
-    ceres_labels, satellites, regions, averages = pkl.load(pkl_path.open("rb"))
-    print(averages.shape)
-    #'''
-
+    ## Load the labels, sat/region strings, and (N,4,F) stats array
+    ceres_labels, satellites, regions, stats = pkl.load(pkl_path.open("rb"))
+    print(stats.shape)
     unique_regions = tuple(set(regions))
     unique_sats = tuple(set(satellites))
 
-    ## Make a data cube with dimensions for (sat, region, datum)
-    scube_shape = (len(unique_sats), len(unique_regions), len(ceres_labels))
+    #'''
+    ## Print the number of valid swaths per region
+    region_counts = [
+            (y,np.count_nonzero(np.array([x==y for x in regions])))
+            for y in unique_regions
+            ]
+    for r,c in region_counts:
+        print(r,c)
+    exit(0)
+    #'''
+
+    ## Make a data cube with dimensions for (sat, region, stat, datum)
+    scube_shape = (len(unique_sats), len(unique_regions),
+                   stats.shape[1], len(ceres_labels))
     scube = np.full(scube_shape, 0.)
 
     sat_idxs = tuple(unique_sats.index(s) for s in satellites)
     reg_idxs = tuple(unique_regions.index(r) for r in regions)
+    counts = np.zeros((*scube_shape[:2], 1, 1)) ## counts for averaging
     for i,(sidx,ridx) in enumerate(zip(sat_idxs, reg_idxs)):
-        scube[sidx,ridx] += averages[i]
-    scube /= averages.shape[0]
+        scube[sidx,ridx,:,:] += stats[i]
+        counts[sidx,ridx] += 1
+    scube /= counts
 
-    for i,l in enumerate(ceres_labels):
-        print(l, np.average(averages[...,i]))
-
-    '''
-    rstats = {r:{s:{l:[] for l in ceres_labels} for s in ("aqua", "terra")}
-              for r in unique_regions}
-    isterra = np.array(map(lambda s:s=="terra", satellites))
-    for i,(s,r) in enumerate(zip(satellites,regions)):
-        for j,l in enumerate(ceres_labels):
-            rstats[r][s][l].append(averages[i,j])
-    '''
+    ## Print the relevant bulk statistics region-wise
+    print_labels = ("lat", "lon", "vza", "sza", "swflux", "lwflux",
+                    "pct_clr", "pct_l1", "pct_l2", "l1_cod", "l2_cod",
+                    "aer_land_pct", "aod_land", "aer_ocean_pct", "aod_ocean",
+                    "aod_ocean_small")
+    stat_columns = ("Label", "Min", "Max", "Avg", "Std")
+    for ridx,r in enumerate(unique_regions):
+        print(f"\n{r}")
+        print("".join(f"{v:<16}" for v in stat_columns))
+        for l in print_labels:
+            lidx = ceres_labels.index(l)
+            printstr = "{:<15.3f} {:<15.3f} {:<15.3f} {:<15.3f}".format(
+                    *list(np.average(scube[:,ridx,:,lidx], axis=0)))
+            print(f"{l:<15} {printstr}")

@@ -79,39 +79,23 @@ def _psf_conditionals(beta, delta):
     """
     Conditional PSF function from ATBD subsystem 4.4 eq 1
     """
-    a = .65 ## angular bound
+    a = .65 ## FOV angular bound
+    ## PSF is symmetric over cross-track scan line
     abs_beta = np.abs(beta)
-
     ## Describes the boundary of the hexagonal optical FOV
     d_f = np.where(abs_beta<a, -1*a, -2*a+abs_beta)
-    #d_b = np.where(abs_beta<a, a, 2*a-abs_beta)
     ## PSF within the optical hexagonal boundary
-    #psf_in_fov = _psf_analytic(delta - d_f)
     psf_in_fov = _psf_analytic(delta - d_f)
     ## Blurred PSF leading the optical hexagon
     psf_before_fov = psf_in_fov - _psf_analytic(delta + d_f)
-
-    ## Select PSF based on whether inside or prior to optical FOV
     psf = np.where(delta<-1*d_f, psf_in_fov, psf_before_fov)
-    #psf = np.where(delta<-1*d_f, -1, 1)
-    #psf = psf_before_fov
-    #psf = psf_in_fov
-    #psf = delta - d_f
-
-    #psf[psf<0] = 0
-    ## Mask out where cross-scan too wide
+    ## Clip values where cross-scan angle is too wide
     psf[abs_beta>2*a] = 0#np.amin(psf)
-    ## Mask out after along-scan boundary
+    ## Clip values after the along-scan boundary
     psf[delta<d_f] = 0#np.amin(psf)
-    #psf[psf<0] = 0
-    return psf
-    '''
-    if or delta<(d_f:=_delta_f(beta)):
-        return 0
-    elif d_f <= delta < -1*d_f:
-        return _psf_analytic(delta - d_f)
-    return _psf_analytic(delta - d_f) - _psf_analytic(delta + d_f)
-    '''
+    ## Clip values below zero
+    psf[psf<0] = 0
+    return psf/np.sum(psf, axis=0, keepdims=True)
 
 def calc_psf(ceres_latlon, modis_latlon, subsat_latlon,
          sensor_altitude=705., earth_radius=6367.):
@@ -365,25 +349,22 @@ if __name__=="__main__":
             num_swath_procs=3,
             samples_per_swath=16,
             block_size=2,
-            modis_bands=None,
+            modis_bands=(26,1,6),
+            #modis_bands=None,
             ceres_pred=("swflux","lwflux"),
             ceres_geom=("sza", "vza", "raa"),
             )
     bidx = 0
     for ((m,g,p),c) in g.prefetch(2).batch(16):
-        for i in range(p.shape[0]):
+        '''
+        #for i in range(p.shape[0]):
             print(enh.array_stat(p[i,...,0].numpy()))
             gt.quick_render(gt.scal_to_rgb(p[i,...,0]))
-            gt.quick_render(gt.scal_to_rgb(p[i,...,1]))
-            gt.quick_render(gt.scal_to_rgb(p[i,...,2]))
-        exit(0)
-        for j in range(c.shape[0]):
+        '''
+        for j in range(m.shape[0]):
             cstr = "-".join([
                 f"{v:03}" for v in tuple(np.array(c[j]).astype(np.uint16))
                 ])
-            #print(np.cos(np.deg2rad(m[j,:,:,-2])))
-            #brdf = np.cos(np.deg2rad(m[j,:,:,-2]))
-            #brdf = np.stack([brdf for i in range(3)], axis=-1)
             X = np.clip(m[j,:,:,:3], 0, 1)*255
             X = X.astype(np.uint8)
             #gt.quick_render(X, vmax=256)

@@ -22,8 +22,8 @@ from pathlib import Path
 from pprint import pprint as ppt
 
 from FG1D import FG1D
-from geom_utils import get_view_vectors,get_equatorial_vectors
-from geom_utils import get_sensor_pixel_geometry
+#from geom_utils import get_view_vectors,get_equatorial_vectors
+#from geom_utils import get_sensor_pixel_geometry
 
 """
 List of 2-tuples like (nc_dataset_label, output_labels) assigning each
