@@ -56,7 +56,6 @@ def check_swath(swath_h5:Path, image_dir:Path=None,
         np.nanmax(modis, axis=0),
         np.nanmean(modis, axis=0),
         np.nanstd(modis, axis=0),
-        np.nanstd(modis, axis=0),
         np.count_nonzero(np.isnan(modis), axis=0).astype(float)
         ], axis=0)
     ceres_stats = np.stack([
@@ -115,10 +114,12 @@ if __name__=="__main__":
     #combined_swath_dir = data_dir.joinpath("swaths")
     combined_swath_dir = data_dir.joinpath("swaths_val")
     ## Path to a pickle file where swath-wise aggregate stats are placed
-    out_pkl = data_dir.joinpath("swath_info.pkl")
+    out_pkl = data_dir.joinpath("swath-info_val.pkl")
 
-    #'''
-    ## substring to constrain the swaths that are checked
+    #rng = np.random.default_rng(seed=200007221752)
+    rng = np.random.default_rng(seed=None)
+    '''
+    """ Dispatch a multiprocessed method to collect multiple swaths' data. """
     substrings = ("azn", "neus", "idn", "hkh", "seus", "alk",)
     swath_h5s = list(filter(
         lambda p:any(s in p.name for s in substrings),
@@ -128,4 +129,37 @@ if __name__=="__main__":
             output_pkl=out_pkl,
             workers=23,
             )
+    '''
+
     #'''
+    """ Print each of the swaths' bulk MODIS and CERES data """
+    shuffle_swaths = True
+    print_clabels = (
+            "lat", "lon", "vza", "sza", "swflux", "lwflux",
+            "pct_clr", "pct_l1", "pct_l2", "l1_cod", "l2_cod",
+            "aer_land_pct", "aod_land",
+            "aer_ocean_pct", "aod_ocean", "aod_ocean_small")
+    print_mlabels = tuple(range(1,37))
+
+    swaths,cstats,mstats,labels = pkl.load(out_pkl.open("rb"))
+    clabels,mlabels,stat_labels = labels
+    idx_swaths = sorted(list(enumerate(swaths)), key=lambda s:s[1][-2])
+    if shuffle_swaths:
+       rng.shuffle(idx_swaths)
+    for i,s in idx_swaths:
+        print()
+        print(s)
+        print(" "*16+"".join([f"{l:<16}" for l in stat_labels]))
+        ## Print MODIS fields as rows of statistics
+        for j,ml in enumerate(filter(lambda m:m in print_mlabels, mlabels)):
+            pstr = f"{ml:<16}"
+            pstr += "".join([f"{s:<16.3f}" for s in list(mstats[i,:,j])])
+            print(pstr)
+        ## Print CERES fields as rows of statistics
+        for j,cl in enumerate(filter(lambda c:c in print_clabels, clabels)):
+            pstr = f"{cl:<16}"
+            pstr += "".join([f"{s:<16.3f}" for s in list(cstats[i,:,j])])
+            print(pstr)
+    #'''
+
+    #agg_mstats = np.average(mstats, axis=0)
