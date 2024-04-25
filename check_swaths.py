@@ -9,7 +9,7 @@ from datetime import datetime
 from datetime import timedelta
 from multiprocessing import Pool
 
-def parse_swath_path(swath_h5:Path):
+def parse_swath_path(swath_h5:Path, time_as_epoch=False):
     """
     Each combined swath hdf5 file uniquely identifies its data with 3
     underscore-separated file name fields as follows:
@@ -24,6 +24,8 @@ def parse_swath_path(swath_h5:Path):
     """
     _,region,sat,date = swath_h5.stem.split("_")
     date = datetime.strptime(date, "%Y%m%d-%H%M")
+    if time_as_epoch:
+        date = int(date.timestamp())
     return region,sat,date
 
 def check_swath(swath_h5:Path, image_dir:Path=None,
@@ -59,11 +61,11 @@ def check_swath(swath_h5:Path, image_dir:Path=None,
         np.count_nonzero(np.isnan(modis), axis=0).astype(float)
         ], axis=0)
     ceres_stats = np.stack([
-        np.nanmin(modis, axis=0),
-        np.nanmax(modis, axis=0),
-        np.nanmean(modis, axis=0),
-        np.nanstd(modis, axis=0),
-        np.count_nonzero(np.isnan(modis), axis=0).astype(float)
+        np.nanmin(ceres, axis=0),
+        np.nanmax(ceres, axis=0),
+        np.nanmean(ceres, axis=0),
+        np.nanstd(ceres, axis=0),
+        np.count_nonzero(np.isnan(ceres), axis=0).astype(float)
         ])
     swath_info = (region, sat, date, mshape)
     labels = (
@@ -131,8 +133,6 @@ if __name__=="__main__":
             )
     '''
 
-    #'''
-    """ Print each of the swaths' bulk MODIS and CERES data """
     shuffle_swaths = True
     print_clabels = (
             "lat", "lon", "vza", "sza", "swflux", "lwflux",
@@ -140,9 +140,11 @@ if __name__=="__main__":
             "aer_land_pct", "aod_land",
             "aer_ocean_pct", "aod_ocean", "aod_ocean_small")
     print_mlabels = tuple(range(1,37))
-
     swaths,cstats,mstats,labels = pkl.load(out_pkl.open("rb"))
     clabels,mlabels,stat_labels = labels
+
+    '''
+    """ Print each of the swaths' bulk MODIS and CERES data """
     idx_swaths = sorted(list(enumerate(swaths)), key=lambda s:s[1][-2])
     if shuffle_swaths:
        rng.shuffle(idx_swaths)
@@ -160,6 +162,31 @@ if __name__=="__main__":
             pstr = f"{cl:<16}"
             pstr += "".join([f"{s:<16.3f}" for s in list(cstats[i,:,j])])
             print(pstr)
-    #'''
+    '''
 
-    #agg_mstats = np.average(mstats, axis=0)
+    agg_mstats = np.stack([
+        np.amin(mstats[:,0], axis=0),
+        np.amax(mstats[:,1], axis=0),
+        np.average(mstats[:,2], axis=0),
+        np.average(mstats[:,3], axis=0),
+        np.round(np.sum(mstats[:,4], axis=0)).astype(int),
+        ])
+    agg_cstats = np.stack([
+        np.amin(cstats[:,0], axis=0),
+        np.amax(cstats[:,1], axis=0),
+        np.average(cstats[:,2], axis=0),
+        np.average(cstats[:,3], axis=0),
+        np.round(np.sum(cstats[:,4], axis=0)).astype(int),
+        ])
+    print(f"## Bulk values calculated with {cstats.shape[0]} swaths")
+    print("".join([f"{l:>16}," for l in ["field"]+list(stat_labels)]))
+    ## Print MODIS fields as rows of statistics
+    for j,ml in enumerate(filter(lambda m:m in print_mlabels, mlabels)):
+        pstr = f"{ml:>16},"
+        pstr += "".join([f"{s:>16.3f}," for s in list(agg_mstats[:,j])])
+        print(pstr)
+    ## Print CERES fields as rows of statistics
+    for j,cl in enumerate(filter(lambda c:c in print_clabels, clabels)):
+        pstr = f"{cl:>16},"
+        pstr += "".join([f"{s:>16.3f}," for s in list(agg_cstats[:,j])])
+        print(pstr)

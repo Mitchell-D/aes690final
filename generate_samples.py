@@ -20,37 +20,12 @@ import geom_utils as gu
 from FG1D import FG1D
 from FeatureGridV2 import FeatureGridV2 as FG
 
-'''
-def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
-                    swath_h5_dir:Path, region_label:str,
-                    lat_buffer:float=0., lon_buffer:float=0.,
-                    bands:tuple=None, isaqua=False, keep_rad=False,
-                    keep_masks=False, spatial_chunks:tuple=(64,64),
-                    debug=False):
-'''
-
-## These lists define the feature ordering anticipated by the PSF function
-psf_modis_labels = ['x_img', 'y_img', 'z_img']
-psf_ceres_labels = ['x_sat', 'y_sat', 'z_sat',
-                    'x_cen', 'y_cen', 'z_cen',
-                    'xx_s2c', 'xy_s2c', 'xz_s2c',
-                    'yx_s2c', 'yy_s2c', 'yz_s2c',
-                    'zx_s2c', 'zy_s2c', 'zz_s2c']
-
-'''
-def _delta_f(beta):
-    b = np.abs(beta)
-    if b<a:
-        return -a
-    elif b<2*a:
-        return -2*a + b
-    else:
-        raise ValueError("Condition should never be met; God help you")
-'''
-
 def _psf_analytic(xi):
     """
-    Analytic PSF function from CERES ATBD subsystem 4.4 eq 2
+    Analytic PSF function from CERES ATBD subsystem 4.4 eq 2 with respect to
+    the xi angle calculated in terms of beta/delta and the FOV boundaries.
+
+    xi is expected to be provided in radians (!!) >:O
     """
     ## analytic psf constants
     c1 = 1.98412
@@ -82,6 +57,7 @@ def _psf_conditionals(beta, delta):
     a = .65 ## FOV angular bound
     ## PSF is symmetric over cross-track scan line
     abs_beta = np.abs(beta)
+    print(np.amin(abs_beta), np.amax(abs_beta), np.amin(delta), np.amax(delta))
     ## Describes the boundary of the hexagonal optical FOV
     d_f = np.where(abs_beta<a, -1*a, -2*a+abs_beta)
     ## PSF within the optical hexagonal boundary
@@ -95,7 +71,8 @@ def _psf_conditionals(beta, delta):
     psf[delta<d_f] = 0#np.amin(psf)
     ## Clip values below zero
     psf[psf<0] = 0
-    return psf/np.sum(psf, axis=0, keepdims=True)
+    psf_sum = np.sum(np.sum(psf,axis=1,keepdims=True),axis=2,keepdims=True)
+    return psf/psf_sum
 
 def calc_psf(ceres_latlon, modis_latlon, subsat_latlon,
          sensor_altitude=705., earth_radius=6367.):
@@ -152,28 +129,23 @@ def calc_psf(ceres_latlon, modis_latlon, subsat_latlon,
     ## (!!!) TODO: (!!!)
     ## need to change delta based on Z' sign, which should be opposite scan dir
     psf = _psf_conditionals(beta, delta + .96)
-    return np.stack((psf, beta, delta), axis=-1)
+    #return np.stack((psf, beta, delta), axis=-1)
+    return psf
 
 def ndsnap(points, latlon):
     """
-    Adapted from:
-    https://stackoverflow.com/questions/8457645/efficient-pythonic-way-to-snap-a-value-to-some-grid
     Snap an 2D-array of points to values along an 2D-array grid.
     Each point will be snapped to the grid value with the smallest
     city-block distance.
 
-    Parameters
-    ---------
-    points: (P,2) array of P (lat,lon) points
-    grid: (M,N,2) array of M latitude and N longitude values represented by
-        features (lat, lon)
+    :@param points: (P,2) array of P (lat,lon) points
+    :@param grid: (M,N,2) array of M latitude and N longitude values
+        represented by features (lat, lon)
 
-    Returns
-    -------
-    A 2D-array with one row per row of points. Each i-th row will
-    correspond to row of grid to which the i-th row of points is closest.
-    In case of ties, it will be snapped to the row of grid with the
-    smaller index.
+    :@return: A 2D-array with one row per row of points. Each i-th row will
+        correspond to row of grid to which the i-th row of points is closest.
+        In case of ties, it will be snapped to the row of grid with the
+        smaller index.
     """
     grid = np.reshape(latlon, (-1,2))
     grid_3d = np.transpose(grid[:,:,np.newaxis], [2,1,0])
@@ -181,36 +153,74 @@ def ndsnap(points, latlon):
     best = np.argmin(diffs, axis=1)
     return divmod(best, latlon.shape[1])
 
-def gen_swaths_samples(
+def swaths_dataset(
         swath_h5s:list,
-        buf_size_mb=128,
-        modis_grid_size=48,
-        modis_bands:list=None,
-        #modis_bands:list=(8,1,4,3,2,18,5,26,6,7,20,27,28,30,31,33),
-        ceres_pred:tuple=("swflux","lwflux"),
-        ceres_geom:tuple=("sza", "vza", "raa"),
+        modis_feats:list=None,
+        #modis_feats:list=(8,1,4,3,2,18,5,26,6,7,20,27,28,30,31,33),
+        ceres_labels:tuple=("swflux","lwflux"),
+        ceres_feats:tuple=("sza", "vza", "raa"),
+        modis_feats_norm:tuple=None,
+        ceres_labels_norm:tuple=None,
+        ceres_feats_norm:tuple=None,
+        grid_size=48,
         num_swath_procs=1,
         samples_per_swath=128,
-        block_size=32, ## Number of consecutive samples drawn per swath
+        block_size=32,
+        buf_size_mb=128,
+        deterministic=False,
+        mask_val=None,
         seed=None
         ):
-    """ """
-    if modis_bands == None:
-        modis_bands = list(range(1,37))
+    """
+    Opens multiple combined swath hdf5s (made by get_modis_swath) as
+    dataset generators, and interleaves their results.
+
+    :@param swath_h5s: Paths to combined swath hdf5 files to generate the data
+    :@param grid_size: Side length of the generated MODIS tile domain
+    :@param modis_feats: MODIS band labels used for features, in order.
+    :@param modis_feats_norm: 2-tuple (offset,gain) of None or array with
+        size=len(modis_feats) values to normalize each MODIS band like
+        (band-offset)/gain.
+    :@param ceres_labels_norm: CERES flux norm bounds as in modis_feats_norm
+    :@param ceres_feats_norm: CERES geometry norm bounds as in modis_feats_norm
+    :@param ceres_labels: CERES bands that are predicted.
+    :@param ceres_feats: CERES geometry bands that are used for features.
+    :@param num_swath_procs: Number of swath generators to multithread over
+    :@param samples_per_swath: Maximum number of footprints to yield from a
+        single swath. If swaths have fewer than this number that's okay.
+    :@param block_size: Number of consecutive samples drawn per swath
+    :@param buf_size_mb: hdf5 buffer size for each swath file in MB
+    :@param deterministic: If True, always yields block_size samples per swath
+        at a time; if False, multiple swaths may inconsistently interleave.
+    :@param seed: Seed
+    """
+    if modis_feats == None:
+        modis_feats = list(range(1,37))
 
     ## output like ((modis, geometry, psf), ceres)
-    modis_shape = (modis_grid_size, modis_grid_size, len(modis_bands))
-    geom_shape = (len(ceres_geom),)
-    psf_shape = (modis_grid_size,modis_grid_size,3)
-    ceres_shape = (len(ceres_pred),)
+    modis_shape = (grid_size, grid_size, len(modis_feats))
+    geom_shape = (grid_size, grid_size, len(ceres_feats),)
+    psf_shape = (grid_size,grid_size,1)
+    ceres_shape = (len(ceres_labels),)
     out_sig = ((
         tf.TensorSpec(shape=modis_shape, dtype=tf.float64),
         tf.TensorSpec(shape=geom_shape, dtype=tf.float64),
         tf.TensorSpec(shape=psf_shape, dtype=tf.float64),
-        ), tf.TensorSpec(shape=ceres_shape, dtype=tf.float64))
+        ),tf.TensorSpec(shape=ceres_shape, dtype=tf.float64))
 
     def _gen_swath(swath_path):
-        """ Generator for a single swath file """
+        """
+        Generator for a single swath file
+
+        1. Open the swath file and initialize FeatureGrid objects of the data
+        2. Randomly select up to samples_per_swath CERES footprints
+        3. Determine the lat/lon of the closest pixel to the CERES centroid,
+           then extract a grid_size square around it. Drop any samples
+           where the MODIS grid extends out of bounds.
+        4. Extract MODIS radiances, CERES fluxes, and CERES geometry associated
+           with each square sub-domain in the sample selection.
+        5. Calculate the point spread function over the domain.
+        """
 
         """ loading all the data from the provided swath file """
 
@@ -238,15 +248,17 @@ def gen_swaths_samples(
         idxs = idxs[:samples_per_swath]
         clatlon = ceres.data(("lat", "lon"))[idxs]
         mlatlon = modis.data(("lat", "lon"))
+        #print(clatlon.shape, mlatlon.shape)
+        #print(np.average(clatlon, axis=0), np.average(np.average(mlatlon, axis=0), axis=0))
         cen_latlon = ndsnap(clatlon, mlatlon)
 
         """ MODIS tile boundary identification """
 
-        ## Extract a modis_grid_size square around each centroid
+        ## Extract a grid_size square around each centroid
         ## and make sure the indeces are in bounds.
         lb_latlon = np.transpose(
-                np.array(cen_latlon).astype(int) - int(modis_grid_size/2))
-        ub_latlon = lb_latlon + modis_grid_size
+                np.array(cen_latlon).astype(int) - int(grid_size/2))
+        ub_latlon = lb_latlon + grid_size
         oob = np.any(np.logical_or(
             lb_latlon<0, ub_latlon>np.array(mlatlon.shape[:2])
             ), axis=-1)
@@ -258,14 +270,14 @@ def gen_swaths_samples(
         """ input data extraction """
 
         ## Extract the viewing geometry and ceres footprints
-        G = ceres.data(ceres_geom)[idxs]
-        C = ceres.data(ceres_pred)[idxs]
+        G = ceres.data(ceres_feats)[idxs]
+        C = ceres.data(ceres_labels)[idxs]
         ## Make slices corresponding to each MODIS tile and extract the bands
         tile_slices = [
                 (slice(lb_latlon[i,0], ub_latlon[i,0]),
                  slice(lb_latlon[i,1], ub_latlon[i,1]))
                 for i in range(lb_latlon.shape[0])]
-        M = modis.data(modis_bands)
+        M = modis.data(modis_feats)
         M = np.stack([M[*ts] for ts in tile_slices], axis=0)
 
         """ point spread function calculation """
@@ -290,40 +302,45 @@ def gen_swaths_samples(
         modis_latlon = np.stack(
                 [modis_latlon[*ts] for ts in tile_slices],
                 axis=0)
-        PSF = calc_psf(
-                ceres_latlon=ceres_latlon,
+        P = calc_psf(
+                ceres_latlon=np.delete(ceres_latlon, np.where(oob), axis=0),
                 modis_latlon=modis_latlon,
-                subsat_latlon=subsat_latlon,
+                subsat_latlon=np.delete(subsat_latlon, np.where(oob), axis=0),
                 )
+        G = np.broadcast_to(G[:,np.newaxis,np.newaxis,:],
+                            (G.shape[0], *geom_shape))
+        P = P[...,np.newaxis]
 
-        """ yielding results """
+        """ Normalize per feature if requested """
+        if not modis_feats_norm is None:
+            M = (M-modis_feats_norm[0])/modis_feats_norm[1]
+        if not ceres_feats_norm is None:
+            G = (G-ceres_feats_norm[0])/ceres_feats_norm[1]
+        if not ceres_labels_norm is None:
+            C = (C-ceres_labels_norm[0])/ceres_labels_norm[1]
 
-        print(G.shape, C.shape, M.shape, PSF.shape)
+        if not mask_val is None:
+            M[np.isnan(M)] = mask_val
 
+        """ yield results """
         for i in range(lb_latlon.shape[0]):
-            X = tuple(map(tf.convert_to_tensor, (M[i], G[i], PSF[i])))
-            Y = tf.convert_to_tensor(C[i])
-            yield (X, Y)
-            '''
-            exit(0)
-            ## Subset the modis grid for the current tile
-            m = M[lb_latlon[i,0]:ub_latlon[i,0],
-                  lb_latlon[i,1]:ub_latlon[i,1]]
-            psf_m = PSF_GEOM_M[lb_latlon[i,0]:ub_latlon[i,0],
-                               lb_latlon[i,1]:ub_latlon[i,1]]
-            ## return tensors like ((modis, geometry), ceres)
-            print(swath_path.decode())
+            x = tuple(map(tf.convert_to_tensor, (M[i], G[i], P[i])))
+            y = tf.convert_to_tensor(C[i])
+            yield (x,y)
 
-            yield ((tf.convert_to_tensor(m), tf.convert_to_tensor(G[i])),
-                   tf.convert_to_tensor(C[i]))
-            '''
-
-    ## Establish a dataset of swath paths to open in each generator
+    ## Convert the swath paths to open in each generator
     swath_h5s = tf.data.Dataset.from_tensor_slices(
-            list(map(lambda p:p.as_posix(), swath_h5s)),
-            )
-    ## Open num_swath_procs hdf5s at a time and interleave their results,
-    ## consuming block_size training samples at each stage.
+            list(map(lambda p:p.as_posix(), swath_h5s)))
+
+    """
+    Concurrently open num_swath_procs swath hdf5s as generator datasets,
+    and cycle through the swaths, building a dataset by consuming
+    block_size elements at once from each. When a generator is depleted,
+    open a new swath in its place until swath_h5s is depleted.
+
+    For more details see:
+    https://www.tensorflow.org/api_docs/python/tf/data/Dataset#for_example
+    """
     D = swath_h5s.interleave(
             lambda fpath: tf.data.Dataset.from_generator(
                 generator=_gen_swath,
@@ -333,6 +350,7 @@ def gen_swaths_samples(
             cycle_length=num_swath_procs,
             num_parallel_calls=num_swath_procs,
             block_length=block_size,
+            deterministic=deterministic,
             )
     return D
 
@@ -342,17 +360,17 @@ if __name__=="__main__":
     fig_dir = Path("figures")
     modis_swath_dir = data_dir.joinpath("swaths")
 
-    g = gen_swaths_samples(
+    g = swaths_dataset(
             swath_h5s=[s for s in modis_swath_dir.iterdir()],
             buf_size_mb=512,
-            modis_grid_size=48,
+            grid_size=48,
             num_swath_procs=3,
             samples_per_swath=16,
             block_size=2,
-            modis_bands=(26,1,6),
-            #modis_bands=None,
-            ceres_pred=("swflux","lwflux"),
-            ceres_geom=("sza", "vza", "raa"),
+            modis_feats=(26,1,6),
+            #modis_feats=None,
+            ceres_labels=("swflux","lwflux"),
+            ceres_feats=("sza", "vza", "raa"),
             )
     bidx = 0
     for ((m,g,p),c) in g.prefetch(2).batch(16):
@@ -368,6 +386,7 @@ if __name__=="__main__":
             X = np.clip(m[j,:,:,:3], 0, 1)*255
             X = X.astype(np.uint8)
             #gt.quick_render(X, vmax=256)
+            exit(0)
             gp.generate_raw_image(
                     np.array(X),
                     fig_dir.joinpath(

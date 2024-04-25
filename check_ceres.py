@@ -14,7 +14,7 @@ from FG1D import FG1D
 
 if __name__=="__main__":
     swath_dir = Path("data/swaths")
-    pkl_path = Path("data/swath_stats.pkl")
+    pkl_path = Path("data/ceres_stats.pkl")
 
     '''
     ## Extract bulk statistics region-wise
@@ -50,14 +50,13 @@ if __name__=="__main__":
     unique_regions = tuple(set(regions))
     unique_sats = tuple(set(satellites))
 
-    #'''
+    '''
     """ Print the number of valid swaths per region """
     region_counts = [(y,np.count_nonzero(np.array([x==y for x in regions])))
                      for y in unique_regions]
     for r,c in region_counts:
         print(r,c)
-    exit(0)
-    #'''
+    '''
 
     """ Make a data cube with dimensions for (sat, region, stat, datum) """
     scube_shape = (len(unique_sats), len(unique_regions),
@@ -74,7 +73,7 @@ if __name__=="__main__":
 
     #'''
     """ Print the relevant bulk statistics region-wise """
-    print_labels = ("lat", "lon", "vza", "sza", "swflux", "lwflux",
+    print_labels = ("lat", "lon", "vza", "sza", "raa", "swflux", "lwflux",
                     "pct_clr", "pct_l1", "pct_l2", "l1_cod", "l2_cod",
                     "aer_land_pct", "aod_land", "aer_ocean_pct", "aod_ocean",
                     "aod_ocean_small")

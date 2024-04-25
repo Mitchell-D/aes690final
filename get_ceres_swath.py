@@ -270,16 +270,16 @@ if __name__=="__main__":
     ## directory of netCDFs from https://ceres-tool.larc.nasa.gov/ord-tool/
     ceres_nc_dir = data_dir.joinpath("ceres")
     ## directory to dump pickles corresponding to lists of swath FGs
-    swath_pkl_dir =  data_dir.joinpath("ceres_swaths_val")
+    swath_pkl_dir =  data_dir.joinpath("ceres_swaths")
 
     ## (!!!) Region label used to identify files to parse (!!!)
     region_labels = (
-            "azn",
+            #"azn",
             "neus",
-            "idn",
-            "hkh",
-            "seus",
-            "alk",
+            #"idn",
+            #"hkh",
+            #"seus",
+            #"alk",
             )
 
     ## Minimum number of valid footprints that warrant storing a swath
@@ -328,8 +328,8 @@ if __name__=="__main__":
         Later on, consider sampling (mod 3)+1 or (mod 3)+2 indexed datasets
         """
         ### (!!!) Only take every 3rd swath (!!!)
-        swaths = swaths[2::3]
-        swaths_subset_label = "_2mod3"
+        swaths = swaths[0::3]
+        swaths_subset_label = "_0mod3"
         swaths_pkl = swaths_pkl.parent.joinpath(
                 swaths_pkl.stem + swaths_subset_label + ".pkl")
 

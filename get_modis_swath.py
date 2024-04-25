@@ -1,5 +1,4 @@
 """  """
-#import gc
 import random
 import numpy as np
 from pathlib import Path
@@ -12,10 +11,6 @@ from collections import ChainMap
 ## Need to use pyhdf for hdf4 and h5py for hdf5 :(
 from pyhdf.SD import SD,SDC
 import h5py
-
-#from krttdkit.operate import enhance as enh
-#from krttdkit.acquire import modis
-#from krttdkit.acquire import laads
 
 import acquire_laads
 from FG1D import FG1D
@@ -266,7 +261,7 @@ def get_modis_swath(ceres_swath:FG1D, laads_token:str, modis_nc_dir:Path,
             get_modis_geometry(
                 modis_geoloc_file=f,
                 include_masks=keep_masks,
-                include_equatorial_vectors=True,
+                include_equatorial_vectors=False,
                 )
             for f in geoloc_files
             ])
@@ -349,9 +344,9 @@ if __name__=="__main__":
     modis_nc_dir = data_dir.joinpath("modis")
     ## Directory where already-generated CERES swaths pkls are retrieved
     #ceres_swath_dir = data_dir.joinpath("ceres_swaths")
-    ceres_swath_dir = data_dir.joinpath("ceres_swaths_val")
+    ceres_swath_dir = data_dir.joinpath("ceres_swaths")
     ## Directory where new MODIS and CERES swaths arrays are deposited
-    combined_swath_dir = data_dir.joinpath("swaths_val")
+    combined_swath_dir = data_dir.joinpath("swaths")
 
     """
     Generate a API download  token with an EarthData account here:
@@ -367,12 +362,12 @@ if __name__=="__main__":
     ## which should contain a list of FG1D-style tuples.
     #'''
     substrings = (
-            "azn",
-            "neus",
-            "idn",
-            "hkh",
-            "seus",
-            "alk",
+            #"azn",
+            "neus_aqua",
+            #"idn",
+            #"hkh",
+            #"seus",
+            #"alk",
             )
     swaths_pkls = list(filter(
         lambda p:any(s in p.name for s in substrings),
@@ -395,7 +390,7 @@ if __name__=="__main__":
             ]
 
     #bbox = ((28,38), (-95,-75))
-    workers = 7
+    workers = 4
     rng_seed = 200007221752
     keep_netcdfs = False
     """  --( ------------- )--  """
