@@ -10,11 +10,9 @@ Take 2 on disaggregating CERES footprints to MODIS resolution.
 </p>
 
 <p align="center">
-      <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/proposal/figs/20200622_0819_hkh_modis.png?raw=true" />
-</p>
-<p align="center">
-      <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_swflux.png?raw=true" />
-      <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_lwflux.png?raw=true" />
+      <img height="128" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_swflux.png?raw=true" />
+      <img height="128" src="https://github.com/Mitchell-D/aes690final/blob/main/proposal/figs/20200622_0819_hkh_modis.png?raw=true" />
+      <img height="128" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/ceres/geo_scatter_2020-06-22_0819Z_lwflux.png?raw=true" />
 </p>
 
 <p align="center"> CERES swath over the Hindu-Kush Himilayan region </p>
@@ -23,7 +21,7 @@ Take 2 on disaggregating CERES footprints to MODIS resolution.
       <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/data_pipeline_overview.png?raw=true" />
 </p>
 
-<p align="center"> CERES swath over the Hindu-Kush Himilayan region </p>
+<p align="center"> data acquisition pipeline </p>
 
 
 ## get\_ceres\_swath.py
