@@ -31,29 +31,29 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"test-3",
+        "model_name":"test-5",
         "model_type":"paed",
-        "random_seed":None,
+        "random_seed":200007221752,
 
-        "num_latent_feats":9,
-        "modis_feats":(8,1,4,3,2,18,5,26,7,20,27,28,30,31,33),
+        "num_latent_feats":16,
+        "modis_feats":(8,1,4,3,2,18,26,7,20,28,30,31,33),
         "ceres_feats":("sza","vza"),
         "ceres_labels":("swflux", "lwflux"),
 
-        "enc_conv_filters":[256,256,256,16],
-        "enc_activation":"sigmoid",
+        "enc_conv_filters":[32,32,32],
+        "enc_activation":"relu",
         "enc_use_bias":True,
         "enc_kwargs":{},
         "enc_out_kwargs":{},
-        "enc_dropout":.1,
+        "enc_dropout":0.,
         "enc_batchnorm":True,
 
-        "dec_conv_filters":[128,128,64,32,8],
-        "dec_activation":"sigmoid",
+        "dec_conv_filters":[32,8],
+        "dec_activation":"relu",
         "dec_use_bias":True,
         "dec_kwargs":{},
         "dec_out_kwargs":{},
-        "dec_dropout":.1,
+        "dec_dropout":0.,
         "dec_batchnorm":True,
 
         ## Exclusive to compile_and_build_dir
@@ -66,7 +66,7 @@ config = {
         "early_stop_metric":"val_mse", ## metric evaluated for stagnation
         "early_stop_patience":64, ## number of epochs before stopping
         "save_weights_only":True,
-        "batch_size":48,
+        "batch_size":256,
         "batch_buffer":3,
         "max_epochs":2048, ## maximum number of epochs to train
         "val_frequency":1, ## epochs between validation
@@ -76,7 +76,7 @@ config = {
         "mask_val":9999.,
         "modis_grid_size":48,
         "num_swath_procs":8,
-        "samples_per_swath":256,
+        "samples_per_swath":128,
         "block_size":16,
         "buf_size_mb":512,
         ## Substrings constraining swath hdf5s used for traning and validation
@@ -85,7 +85,7 @@ config = {
         "val_regions":("neus",),
         "val_sats":("aqua",),
 
-        "notes":"faster learning rate, sigmoid activation; only neus",
+        "notes":"small decoder, random seed, limited training domain, and faster learning rate over neus",
         }
 ## Count each of the input types for the generators' init function
 config["num_modis_feats"] = len(config["modis_feats"])
@@ -104,19 +104,22 @@ gmean,gstdev = map(
 cmean,cstdev = map(
         np.array,zip(*[cnorm[band] for band in config["ceres_labels"]]))
 
-num_val = 30
+max_train_swaths = 120
+max_val_swaths = 60
+
 ## select the swath hdf5 files to use for training and validation
 train_h5s,train_swath_ids = zip(*[
     (s,parse_swath_path(s, True))
     for s in rng.permuted(list(train_swath_dir.iterdir()))
     if any(sat in s.stem for sat in config["train_sats"])
-    and any(region in s.stem for region in config["train_regions"])])
+    and any(region in s.stem for region in config["train_regions"])
+    ][:max_train_swaths])
 val_h5s,val_swath_ids = zip(*[
     (s,parse_swath_path(s, True))
     for s in rng.permuted(list(val_swath_dir.iterdir()))
     if any(sat in s.stem for sat in config["val_sats"])
     and any(region in s.stem for region in config["train_regions"])
-    ][:30])
+    ][:max_val_swaths])
 
 ## save each swath's unique ID as a 3-tuple (region, satellite, epoch_time)
 config["swaths_train"] = train_swath_ids
