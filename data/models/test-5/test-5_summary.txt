@@ -1,0 +1,50 @@
+Model: "model"
+__________________________________________________________________________________________________
+ Layer (type)                Output Shape                 Param #   Connected to                  
+==================================================================================================
+ in_modis (InputLayer)       [(None, None, None, 13)]     0         []                            
+                                                                                                  
+ enc_conv_0 (Conv2D)         (None, None, None, 32)       448       ['in_modis[0][0]']            
+                                                                                                  
+ enc_bn_0 (BatchNormalizati  (None, None, None, 32)       128       ['enc_conv_0[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_1 (Conv2D)         (None, None, None, 32)       1056      ['enc_bn_0[0][0]']            
+                                                                                                  
+ enc_bn_1 (BatchNormalizati  (None, None, None, 32)       128       ['enc_conv_1[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_2 (Conv2D)         (None, None, None, 32)       1056      ['enc_bn_1[0][0]']            
+                                                                                                  
+ enc_bn_2 (BatchNormalizati  (None, None, None, 32)       128       ['enc_conv_2[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_out (Conv2D)            (None, None, None, 16)       528       ['enc_bn_2[0][0]']            
+                                                                                                  
+ in_geom (InputLayer)        [(None, None, None, 2)]      0         []                            
+                                                                                                  
+ concat_geom (Concatenate)   (None, None, None, 18)       0         ['enc_out[0][0]',             
+                                                                     'in_geom[0][0]']             
+                                                                                                  
+ dec_conv_0 (Conv2D)         (None, None, None, 32)       608       ['concat_geom[0][0]']         
+                                                                                                  
+ dec_bn_0 (BatchNormalizati  (None, None, None, 32)       128       ['dec_conv_0[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ dec_conv_1 (Conv2D)         (None, None, None, 8)        264       ['dec_bn_0[0][0]']            
+                                                                                                  
+ dec_bn_1 (BatchNormalizati  (None, None, None, 8)        32        ['dec_conv_1[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ dec_out (Conv2D)            (None, None, None, 2)        18        ['dec_bn_1[0][0]']            
+                                                                                                  
+ in_psf (InputLayer)         [(None, None, None, 1)]      0         []                            
+                                                                                                  
+ psf (Lambda)                (None, 2)                    0         ['dec_out[0][0]',             
+                                                                     'in_psf[0][0]']              
+                                                                                                  
+==================================================================================================
+Total params: 4522 (17.66 KB)
+Trainable params: 4250 (16.60 KB)
+Non-trainable params: 272 (1.06 KB)
+__________________________________________________________________________________________________
