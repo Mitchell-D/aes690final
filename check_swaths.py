@@ -120,7 +120,7 @@ if __name__=="__main__":
 
     #rng = np.random.default_rng(seed=200007221752)
     rng = np.random.default_rng(seed=None)
-    #'''
+    '''
     """ Dispatch a multiprocessed method to collect multiple swaths' data. """
     substrings = ("azn", "neus", "idn", "hkh", "seus", "alk",)
     swath_h5s = list(filter(
@@ -131,7 +131,7 @@ if __name__=="__main__":
             output_pkl=out_pkl,
             workers=23,
             )
-    #'''
+    '''
 
     shuffle_swaths = True
     print_clabels = (
