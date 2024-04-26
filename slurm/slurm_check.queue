@@ -23,8 +23,8 @@
 #SBATCH -J swath_check
 
 ####SBATCH --open-mode=append ## Don't overwrite existing files
-#SBATCH -o /rhome/mdodson/aes690final/slurm/out/slurm_swath-check-val.out # STDOUT
-#SBATCH -e /rhome/mdodson/aes690final/slurm/out/slurm_swath-check-val.err # STDERR
+#SBATCH -o /rhome/mdodson/aes690final/slurm/out/slurm_swath-check-train.out # STDOUT
+#SBATCH -e /rhome/mdodson/aes690final/slurm/out/slurm_swath-check-train.err # STDERR
 
 #cd /rhome/mdodson/aes690final
 

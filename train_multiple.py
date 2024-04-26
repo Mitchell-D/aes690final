@@ -31,7 +31,7 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"test-2",
+        "model_name":"test-3",
         "model_type":"paed",
         "random_seed":None,
 
@@ -40,25 +40,24 @@ config = {
         "ceres_feats":("sza","vza"),
         "ceres_labels":("swflux", "lwflux"),
 
-
         "enc_conv_filters":[256,256,256,16],
-        "enc_activation":"gelu",
+        "enc_activation":"sigmoid",
         "enc_use_bias":True,
         "enc_kwargs":{},
         "enc_out_kwargs":{},
-        "enc_dropout":.2,
+        "enc_dropout":.1,
         "enc_batchnorm":True,
 
-        "dec_conv_filters":[32,32,32,8],
-        "dec_activation":"gelu",
+        "dec_conv_filters":[128,128,64,32,8],
+        "dec_activation":"sigmoid",
         "dec_use_bias":True,
         "dec_kwargs":{},
         "dec_out_kwargs":{},
-        "dec_dropout":0,
+        "dec_dropout":.1,
         "dec_batchnorm":True,
 
         ## Exclusive to compile_and_build_dir
-        "learning_rate":1e-5,
+        "learning_rate":1e-3,
         "loss":"mse",
         "metrics":["mse", "mae"],
         "weighted_metrics":["mse", "mae"],
@@ -68,7 +67,7 @@ config = {
         "early_stop_patience":64, ## number of epochs before stopping
         "save_weights_only":True,
         "batch_size":48,
-        "batch_buffer":2,
+        "batch_buffer":3,
         "max_epochs":2048, ## maximum number of epochs to train
         "val_frequency":1, ## epochs between validation
 
@@ -76,17 +75,17 @@ config = {
         #"train_val_ratio":.9,
         "mask_val":9999.,
         "modis_grid_size":48,
-        "num_swath_procs":15,
+        "num_swath_procs":8,
         "samples_per_swath":256,
         "block_size":16,
         "buf_size_mb":512,
         ## Substrings constraining swath hdf5s used for traning and validation
-        "train_regions":("hkh",),
+        "train_regions":("neus",),
         "train_sats":("aqua",),
-        "val_regions":("hkh",),
+        "val_regions":("neus",),
         "val_sats":("aqua",),
 
-        "notes":"avoiding band 6 due to striping for aqua, much larger model",
+        "notes":"faster learning rate, sigmoid activation; only neus",
         }
 ## Count each of the input types for the generators' init function
 config["num_modis_feats"] = len(config["modis_feats"])
@@ -112,7 +111,6 @@ train_h5s,train_swath_ids = zip(*[
     for s in rng.permuted(list(train_swath_dir.iterdir()))
     if any(sat in s.stem for sat in config["train_sats"])
     and any(region in s.stem for region in config["train_regions"])])
-print(rng.permuted(list(val_swath_dir.iterdir()))[:30])
 val_h5s,val_swath_ids = zip(*[
     (s,parse_swath_path(s, True))
     for s in rng.permuted(list(val_swath_dir.iterdir()))

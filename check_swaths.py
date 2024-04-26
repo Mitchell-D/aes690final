@@ -114,13 +114,13 @@ if __name__=="__main__":
     data_dir = Path("data")
     ## directory where existingswaths files are
     #combined_swath_dir = data_dir.joinpath("swaths")
-    combined_swath_dir = data_dir.joinpath("swaths_val")
+    combined_swath_dir = data_dir.joinpath("swaths")
     ## Path to a pickle file where swath-wise aggregate stats are placed
-    out_pkl = data_dir.joinpath("swath-info_val.pkl")
+    out_pkl = data_dir.joinpath("swath-info_train.pkl")
 
     #rng = np.random.default_rng(seed=200007221752)
     rng = np.random.default_rng(seed=None)
-    '''
+    #'''
     """ Dispatch a multiprocessed method to collect multiple swaths' data. """
     substrings = ("azn", "neus", "idn", "hkh", "seus", "alk",)
     swath_h5s = list(filter(
@@ -131,7 +131,7 @@ if __name__=="__main__":
             output_pkl=out_pkl,
             workers=23,
             )
-    '''
+    #'''
 
     shuffle_swaths = True
     print_clabels = (
