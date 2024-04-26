@@ -22,6 +22,7 @@ val_swath_dir = Path("data/swaths_val")
 
 """ Establish normalization bounds based on bulk stats from check_swaths """
 from norm_coeffs import modis_norm,ceres_norm,geom_norm
+mnorm,cnorm,gnorm = map(dict, (modis_norm, ceres_norm, geom_norm))
 
 """
 Config contains configuration values default to all models.
@@ -75,7 +76,7 @@ config = {
         #"train_val_ratio":.9,
         "mask_val":9999.,
         "modis_grid_size":48,
-        "num_swath_procs":7,
+        "num_swath_procs":15,
         "samples_per_swath":256,
         "block_size":16,
         "buf_size_mb":512,
@@ -92,26 +93,32 @@ config["num_modis_feats"] = len(config["modis_feats"])
 config["num_ceres_feats"] = len(config["ceres_feats"])
 config["num_ceres_labels"] = len(config["ceres_labels"])
 
+rng = np.random.default_rng(seed=config["random_seed"])
 
 """ Initialize the training and validation data generators given the config """
 
 ## collect normalization bounds from the configured defaults for selected bands
 mmean,mstdev = map(
-        np.array,zip(*[modis_norm[band] for band in config["modis_feats"]]))
+        np.array,zip(*[mnorm[band] for band in config["modis_feats"]]))
 gmean,gstdev = map(
-        np.array,zip(*[geom_norm[band] for band in config["ceres_feats"]]))
+        np.array,zip(*[gnorm[band] for band in config["ceres_feats"]]))
 cmean,cstdev = map(
-        np.array,zip(*[ceres_norm[band]for band in config["ceres_labels"]]))
+        np.array,zip(*[cnorm[band] for band in config["ceres_labels"]]))
 
+num_val = 30
 ## select the swath hdf5 files to use for training and validation
 train_h5s,train_swath_ids = zip(*[
-    (s,parse_swath_path(s, True)) for s in train_swath_dir.iterdir()
+    (s,parse_swath_path(s, True))
+    for s in rng.permuted(list(train_swath_dir.iterdir()))
     if any(sat in s.stem for sat in config["train_sats"])
     and any(region in s.stem for region in config["train_regions"])])
+print(rng.permuted(list(val_swath_dir.iterdir()))[:30])
 val_h5s,val_swath_ids = zip(*[
-    (s,parse_swath_path(s, True)) for s in val_swath_dir.iterdir()
+    (s,parse_swath_path(s, True))
+    for s in rng.permuted(list(val_swath_dir.iterdir()))
     if any(sat in s.stem for sat in config["val_sats"])
-    and any(region in s.stem for region in config["train_regions"])])
+    and any(region in s.stem for region in config["train_regions"])
+    ][:30])
 
 ## save each swath's unique ID as a 3-tuple (region, satellite, epoch_time)
 config["swaths_train"] = train_swath_ids

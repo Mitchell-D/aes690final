@@ -17,9 +17,9 @@ from pprint import pprint as ppt
 #from krttdkit.visualize import geoplot as gp
 #from krttdkit.visualize import TextFormat as TF
 #from krttdkit.operate import enhance as enh
-from krttdkit.operate.recipe_book import transforms
+#from krttdkit.operate.recipe_book import transforms
 #from krttdkit.operate import classify
-from krttdkit.operate import Recipe
+#from krttdkit.operate import Recipe
 
 class FeatureGridV2:
     @staticmethod
@@ -163,12 +163,12 @@ class FeatureGridV2:
         if not mlabel is None:
             print(f"WARNING masking not yet implemented")
         if flabel is None:
-            return self._data[*slices]
+            return self._data[(...,*slices)]
         elif hasattr(flabel, "__iter__") and not type(flabel)==str:
             fidx = tuple(self._flabels.index(fl) for fl in flabel)
-            return self._data[*slices,...,fidx]
+            return self._data[(*slices,...,fidx)]
         assert flabel in self._flabels
-        return self._data[*slices, ..., self._flabels.index(flabel)]
+        return self._data[(*slices, ..., self._flabels.index(flabel))]
 
     def subgrid(self, flabels:list=None, **kwargs):
         """

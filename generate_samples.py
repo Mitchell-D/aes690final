@@ -12,10 +12,6 @@ from datetime import datetime
 from multiprocessing import Pool
 from collections import ChainMap
 
-from krttdkit.operate import enhance as enh
-from krttdkit.visualize import guitools as gt
-from krttdkit.visualize import geoplot as gp
-
 import geom_utils as gu
 from FG1D import FG1D
 from FeatureGridV2 import FeatureGridV2 as FG
@@ -57,7 +53,7 @@ def _psf_conditionals(beta, delta):
     a = .65 ## FOV angular bound
     ## PSF is symmetric over cross-track scan line
     abs_beta = np.abs(beta)
-    print(np.amin(abs_beta), np.amax(abs_beta), np.amin(delta), np.amax(delta))
+    #print(np.amin(abs_beta), np.amax(abs_beta), np.amin(delta), np.amax(delta))
     ## Describes the boundary of the hexagonal optical FOV
     d_f = np.where(abs_beta<a, -1*a, -2*a+abs_beta)
     ## PSF within the optical hexagonal boundary
@@ -279,7 +275,7 @@ def swaths_dataset(
                  slice(lb_latlon[i,1], ub_latlon[i,1]))
                 for i in range(lb_latlon.shape[0])]
         M = modis.data(modis_feats)
-        M = np.stack([M[*ts] for ts in tile_slices], axis=0)
+        M = np.stack([M[lb,ub] for lb,ub in tile_slices], axis=0)
 
         """ point spread function calculation """
 
@@ -301,7 +297,7 @@ def swaths_dataset(
                  (modis.data("lon")+360.)%360.),
                 axis=-1)
         modis_latlon = np.stack(
-                [modis_latlon[*ts] for ts in tile_slices],
+                [modis_latlon[lb,ub] for lb,ub in tile_slices],
                 axis=0)
         P = calc_psf(
                 ceres_latlon=np.delete(ceres_latlon, np.where(oob), axis=0),
@@ -360,6 +356,10 @@ def swaths_dataset(
     return D
 
 if __name__=="__main__":
+    from krttdkit.operate import enhance as enh
+    from krttdkit.visualize import guitools as gt
+    from krttdkit.visualize import geoplot as gp
+
     debug = False
     data_dir = Path("data")
     fig_dir = Path("figures")

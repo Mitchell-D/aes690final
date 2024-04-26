@@ -1,0 +1,42 @@
+#!/bin/csh
+### SLURM batch script
+
+### Email address
+#SBATCH --mail-user=mtd0012@uah.edu
+
+### TOTAL processors (number of tasks)
+#SBATCH --ntasks 16
+
+### total run time estimate (D-HH:MM)
+#SBATCH -t 3-00:00
+
+### memory (MB per CPU)
+#SBATCH --mem-per-cpu=4G
+
+### Mail to user on job done and fail
+#SBATCH --mail-type=END,FAIL
+
+### Partition (queue), select shared for GPU
+### Optionally specify a GPU type: --gres=gpu:rtx5000:1 or --gres=gpu:a100:1
+#SBATCH -p shared --gres=gpu:a100:1
+###SBATCH -p shared --gres=gpu:rtx5000:1
+###SBATCH -p shared --gres=gpu:1
+
+#SBATCH -J paed_train
+#SBATCH -o /rhome/mdodson/aes690final/slurm/out/slurm_train-paed-1.out ## STDOUT
+#SBATCH -e /rhome/mdodson/aes690final/slurm/out/slurm_train-paed-1.err ## STDERR
+
+module load cuda
+$CUDA_PATH/samples/bin/x86_64/linux/release/deviceQuery
+
+### Set dynamic link loader path variable to include CUDA and bins from mamba
+setenv LD_LIBRARY_PATH /common/pkgs/cuda/cuda-11.4/lib64
+setenv LD_LIBRARY_PATH ${LD_LIBRARY_PATH}:/common/pkgs/cuda/cuda-11.4/extras/CUPTI/lib64
+setenv LD_LIBRARY_PATH ${LD_LIBRARY_PATH}:/rhome/mdodson/.micromamba/envs/learn/lib
+echo $LD_LIBRARY_PATH
+
+cd /rhome/mdodson/aes690final
+
+set runcmd = /rhome/mdodson/.micromamba/envs/learn/bin/python
+
+${runcmd} -u train_multiple.py
