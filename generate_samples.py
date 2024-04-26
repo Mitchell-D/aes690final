@@ -198,10 +198,10 @@ def swaths_dataset(
         modis_feats = list(range(1,37))
 
     ## output like ((modis, geometry, psf), ceres)
-    modis_shape = (grid_size, grid_size, len(modis_feats))
-    geom_shape = (grid_size, grid_size, len(ceres_feats),)
-    psf_shape = (grid_size,grid_size,1)
-    ceres_shape = (len(ceres_labels),)
+    modis_shape = (grid_size, grid_size, len(modis_feats)) ## (B,N,N,Fm)
+    geom_shape = (grid_size, grid_size, len(ceres_feats),) ## (B,N,N,Fg)
+    psf_shape = (grid_size,grid_size,1)                    ## (B,N,N,1))
+    ceres_shape = (len(ceres_labels),)                     ## (B,Fc)
     out_sig = ((
         tf.TensorSpec(shape=modis_shape, dtype=tf.float64),
         tf.TensorSpec(shape=geom_shape, dtype=tf.float64),
@@ -226,8 +226,9 @@ def swaths_dataset(
 
         ## Determines the buffer size by assuming each chunk isn't much bigger
         ## than 1MB. There are probably better ways to tune this.
+        swath_path = swath_path.decode()
         f_swath = h5py.File(
-                swath_path.decode(),
+                swath_path,
                 mode="r",
                 rdcc_nbytes=buf_size_mb*1024**2,
                 rdcc_nslots=buf_size_mb*15,
@@ -311,6 +312,7 @@ def swaths_dataset(
                             (G.shape[0], *geom_shape))
         P = P[...,np.newaxis]
 
+        print(f"{P.shape[0]} samples taken from {swath_path}")
         """ Normalize per feature if requested """
         if not modis_feats_norm is None:
             M = (M-modis_feats_norm[0])/modis_feats_norm[1]
@@ -320,7 +322,10 @@ def swaths_dataset(
             C = (C-ceres_labels_norm[0])/ceres_labels_norm[1]
 
         if not mask_val is None:
-            M[np.isnan(M)] = mask_val
+            nans = np.isnan(M)
+            if np.any(nans):
+                print(f"Replacing {np.count_nonzero(nans)} NaN values")
+            M[nans] = mask_val
 
         """ yield results """
         for i in range(lb_latlon.shape[0]):
