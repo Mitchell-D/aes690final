@@ -116,6 +116,7 @@ if __name__=="__main__":
     #combined_swath_dir = data_dir.joinpath("swaths")
     combined_swath_dir = data_dir.joinpath("swaths")
     ## Path to a pickle file where swath-wise aggregate stats are placed
+    #out_pkl = data_dir.joinpath("swath-info_val.pkl")
     out_pkl = data_dir.joinpath("swath-info_val.pkl")
 
     #rng = np.random.default_rng(seed=200007221752)
@@ -145,7 +146,7 @@ if __name__=="__main__":
 
     print(cstats.shape, mstats.shape)
 
-    #'''
+    '''
     """ Print each of the swaths' bulk MODIS and CERES data """
     idx_swaths = sorted(list(enumerate(swaths)), key=lambda s:s[1][-2])
     if shuffle_swaths:
@@ -170,7 +171,7 @@ if __name__=="__main__":
                 for s in list(cstats[i,:,j])
                 ])
             print(pstr)
-    #'''
+    '''
 
     #'''
     agg_mstats = np.stack([
@@ -183,8 +184,8 @@ if __name__=="__main__":
     agg_cstats = np.stack([
         np.amin(cstats[:,0], axis=0),
         np.amax(cstats[:,1], axis=0),
-        np.average(cstats[:,2], axis=0),
-        np.average(cstats[:,3], axis=0),
+        np.nanmean(cstats[:,2], axis=0),
+        np.nanmean(cstats[:,3], axis=0),
         np.round(np.sum(cstats[:,4], axis=0)).astype(int),
         ])
     print(f"## Bulk values calculated with {cstats.shape[0]} swaths")

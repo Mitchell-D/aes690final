@@ -152,7 +152,6 @@ def ndsnap(points, latlon):
 def swaths_dataset(
         swath_h5s:list,
         modis_feats:list=None,
-        #modis_feats:list=(8,1,4,3,2,18,5,26,6,7,20,27,28,30,31,33),
         ceres_labels:tuple=("swflux","lwflux"),
         ceres_feats:tuple=("sza", "vza", "raa"),
         modis_feats_norm:tuple=None,
@@ -318,7 +317,7 @@ def swaths_dataset(
             C = (C-ceres_labels_norm[0])/ceres_labels_norm[1]
 
         if not mask_val is None:
-            nans = np.isnan(M)
+            nans = np.logical_not(np.isfinite(M))
             if np.any(nans):
                 print(f"Replacing {np.count_nonzero(nans)} NaN values")
             M[nans] = mask_val
@@ -331,7 +330,7 @@ def swaths_dataset(
 
     ## Convert the swath paths to open in each generator
     swath_h5s = tf.data.Dataset.from_tensor_slices(
-            list(map(lambda p:p.as_posix(), swath_h5s)))
+            list(map(lambda p:p.as_posix(), map(Path,swath_h5s))))
 
     """
     Concurrently open num_swath_procs swath hdf5s as generator datasets,
@@ -355,15 +354,130 @@ def swaths_dataset(
             )
     return D
 
-if __name__=="__main__":
-    from krttdkit.operate import enhance as enh
-    from krttdkit.visualize import guitools as gt
-    from krttdkit.visualize import geoplot as gp
+def get_tiles_h5(
+        tile_h5_path:Path, swath_h5s, modis_feats, ceres_feats, ceres_labels,
+        grid_size, samples_per_swath=1000000, block_size=1000000,
+        modis_feats_norm:tuple=None, ceres_feats_norm:tuple=None,
+        ceres_labels_norm:tuple=None, num_swath_procs=1, mask_val=None,
+        deterministic=False, batch_chunk_size=256, max_tile_count=None,
+        buf_size_mb=128, seed=None):
+    """
+    """
+    tile_h5_path = Path(tile_h5_path)
+    if tile_h5_path.exists():
+        print(f"Warning: {tile_h5_path.as_posix()} exits!")
+        return tile_h5_path
+    with h5py.File(tile_h5_path, "w") as f:
+        chunk_shape = (batch_chunk_size, grid_size, grid_size)
+        DP = f.create_dataset(
+                name="/data/psf",
+                shape=(0, grid_size, grid_size, 1),
+                maxshape=(None, grid_size, grid_size, 1),
+                chunks=(*chunk_shape, 1)
+                )
+        DG = f.create_dataset(
+                name="/data/geom",
+                shape=(0,grid_size,grid_size,len(ceres_feats)),
+                maxshape=(None,grid_size,grid_size,len(ceres_feats)),
+                chunks=(*chunk_shape, len(ceres_feats)),
+                compression="gzip",
+                )
+        DM = f.create_dataset(
+                name="/data/modis",
+                shape=(0, grid_size, grid_size, len(modis_feats)),
+                maxshape=(None, grid_size, grid_size, len(modis_feats)),
+                chunks=(*chunk_shape, len(modis_feats)),
+                compression="gzip",
+                )
+        DC = f.create_dataset(
+                name="/data/ceres",
+                shape=(0, 1, 1, len(ceres_labels)),
+                maxshape=(None, 1, 1, len(ceres_labels)),
+                chunks=(batch_chunk_size, 1, 1, len(ceres_labels)),
+                )
+        swath_dataset_params = {
+                "swath_h5s":list(map(lambda p:p.as_posix(), swath_h5s)),
+                "modis_feats":modis_feats,
+                "ceres_labels":ceres_labels,
+                "grid_size":grid_size,
+                "num_swath_procs":num_swath_procs,
+                "samples_per_swath":samples_per_swath,
+                "block_size":block_size,
+                "modis_feats_norm":tuple(modis_feats_norm[0]),
+                "ceres_labels_norm":tuple(ceres_labels_norm[0]),
+                "ceres_feats_norm":tuple(ceres_feats_norm[0]),
+                "mask_val":mask_val,
+                "deterministic":deterministic,
+                "buf_size_mb":buf_size_mb,
+                "seed":seed,
+                }
+        print(swath_dataset_params)
+        f["data"].attrs.update({
+            "swath_dataset_params":json.dumps(swath_dataset_params)
+            })
+        dataset = swaths_dataset(**swath_dataset_params)
+        h5idx = 0
+        for (m,g,p),c in dataset.batch(batch_chunk_size):
+            s = slice(h5idx, h5idx+m.shape[0])
+            h5idx += m.shape[0]
+            DM.resize((h5idx, *DM.shape[1:]))
+            DG.resize((h5idx, *DG.shape[1:]))
+            DP.resize((h5idx, *DP.shape[1:]))
+            DC.resize((h5idx, *DC.shape[1:]))
+            DM[s,...] = m.numpy()
+            DG[s,...] = g.numpy()
+            DP[s,...] = p.numpy()
+            DC[s,...] = c[:,np.newaxis,np.newaxis,:].numpy()
+            f.flush()
+        f.close()
+    return tile_h5_path
 
+def tiles_dataset(tiles_h5s:list):
+    pass
+
+if __name__=="__main__":
     debug = False
     data_dir = Path("data")
     fig_dir = Path("figures")
-    modis_swath_dir = data_dir.joinpath("swaths")
+    modis_swath_dir = data_dir.joinpath("swaths_val")
+
+    #'''
+    """ Generate a new hdf5 file from swath hdf5s """
+    from norm_coeffs import modis_norm,ceres_norm,geom_norm
+    (mlabels,mnorm),(clabels,cnorm),(glabels,gnorm) = map(
+            lambda t:zip(*t), (modis_norm, ceres_norm, geom_norm))
+    tiles_h5_path = data_dir.joinpath(f"tiles_aqua_test-val.h5")
+    get_tiles_h5(
+            tile_h5_path=tiles_h5_path,
+            swath_h5s=[
+                p for p in modis_swath_dir.iterdir() if "aqua" in p.name],
+            modis_feats=mlabels,
+            ceres_feats=glabels,
+            ceres_labels=clabels,
+            grid_size=48,
+            samples_per_swath=256,
+            block_size=8, ## deplete the swath per block
+            modis_feats_norm=tuple(map(np.array, zip(*mnorm))),
+            ceres_feats_norm=tuple(map(np.array, zip(*gnorm))),
+            ceres_labels_norm=tuple(map(np.array, zip(*cnorm))),
+            num_swath_procs=4,
+            mask_val=None,
+            deterministic=True,
+            batch_chunk_size=128,
+            max_tile_count=None,
+            buf_size_mb=128,
+            seed=None,
+            )
+    exit(0)
+    #'''
+
+
+
+    '''
+    """ Generate data in real time from swath hdf5s  """
+    from krttdkit.operate import enhance as enh
+    from krttdkit.visualize import guitools as gt
+    from krttdkit.visualize import geoplot as gp
 
     g = swaths_dataset(
             swath_h5s=[s for s in modis_swath_dir.iterdir()],
@@ -380,11 +494,9 @@ if __name__=="__main__":
 
     bidx = 0
     for ((m,g,p),c) in g.prefetch(2).batch(16):
-        '''
         #for i in range(p.shape[0]):
-            print(enh.array_stat(p[i,...,0].numpy()))
-            gt.quick_render(gt.scal_to_rgb(p[i,...,0]))
-        '''
+        #    print(enh.array_stat(p[i,...,0].numpy()))
+        #    gt.quick_render(gt.scal_to_rgb(p[i,...,0]))
         for j in range(m.shape[0]):
             cstr = "-".join([
                 f"{v:03}" for v in tuple(np.array(c[j]).astype(np.uint16))
@@ -399,3 +511,4 @@ if __name__=="__main__":
                         f"modis_tile/{bidx:02}-{j:03}_{cstr}.png"),
                     )
         bidx += 1
+    '''

@@ -19,6 +19,13 @@ Take 2 on disaggregating CERES footprints to MODIS resolution.
 
 <p align="center"> CERES swath over the Hindu-Kush Himilayan region </p>
 
+<p align="center">
+      <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/data_pipeline_overview.png?raw=true" />
+</p>
+
+<p align="center"> CERES swath over the Hindu-Kush Himilayan region </p>
+
+
 ## get\_ceres\_swath.py
 
 Ingest a directory of CERES SSF E4A netCDF files acquired from
