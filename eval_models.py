@@ -89,15 +89,6 @@ if __name__=="__main__":
 
     exit(0)
 
-    print(m.shape, c.shape, g.shape, p.shape)
-
-    out = model((m,g,p))
-
-    print(out.shape)
-
-
-    exit(0)
-
     ## select the swath hdf5 files to use for training and validation
     train_h5s,train_swath_ids = zip(*[
         (s,parse_swath_path(s, True)) for s in train_swath_dir.iterdir()

@@ -372,11 +372,12 @@ if __name__=="__main__":
             num_swath_procs=3,
             samples_per_swath=16,
             block_size=2,
-            modis_feats=(26,1,6),
+            modis_feats=(8,1,4,3,2,18,5,26,7,20,27,28,30,31,33),
             #modis_feats=None,
             ceres_labels=("swflux","lwflux"),
-            ceres_feats=("sza", "vza", "raa"),
+            ceres_feats=("sza", "vza"),
             )
+
     bidx = 0
     for ((m,g,p),c) in g.prefetch(2).batch(16):
         '''
