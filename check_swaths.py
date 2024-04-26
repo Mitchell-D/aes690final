@@ -116,11 +116,11 @@ if __name__=="__main__":
     #combined_swath_dir = data_dir.joinpath("swaths")
     combined_swath_dir = data_dir.joinpath("swaths")
     ## Path to a pickle file where swath-wise aggregate stats are placed
-    out_pkl = data_dir.joinpath("swath-info_train.pkl")
+    out_pkl = data_dir.joinpath("swath-info_val.pkl")
 
     #rng = np.random.default_rng(seed=200007221752)
     rng = np.random.default_rng(seed=None)
-    #'''
+    '''
     """ Dispatch a multiprocessed method to collect multiple swaths' data. """
     substrings = ("azn", "neus", "idn", "hkh", "seus", "alk",)
     swath_h5s = list(filter(
@@ -131,7 +131,7 @@ if __name__=="__main__":
             output_pkl=out_pkl,
             workers=23,
             )
-    #'''
+    '''
 
     shuffle_swaths = True
     print_clabels = (
@@ -143,7 +143,9 @@ if __name__=="__main__":
     swaths,cstats,mstats,labels = pkl.load(out_pkl.open("rb"))
     clabels,mlabels,stat_labels = labels
 
-    '''
+    print(cstats.shape, mstats.shape)
+
+    #'''
     """ Print each of the swaths' bulk MODIS and CERES data """
     idx_swaths = sorted(list(enumerate(swaths)), key=lambda s:s[1][-2])
     if shuffle_swaths:
@@ -153,17 +155,24 @@ if __name__=="__main__":
         print(s)
         print(" "*16+"".join([f"{l:<16}" for l in stat_labels]))
         ## Print MODIS fields as rows of statistics
-        for j,ml in enumerate(filter(lambda m:m in print_mlabels, mlabels)):
+        for j,ml in filter(lambda m:m[1] in print_mlabels, enumerate(mlabels)):
             pstr = f"{ml:<16}"
-            pstr += "".join([f"{s:<16.3f}" for s in list(mstats[i,:,j])])
+            pstr += "".join([
+                (f"{s:>16.3f},",f"{s:>16.3e}")[bool(s>1e12)]
+                for s in list(mstats[i,:,j])
+                ])
             print(pstr)
         ## Print CERES fields as rows of statistics
-        for j,cl in enumerate(filter(lambda c:c in print_clabels, clabels)):
+        for j,cl in filter(lambda c:c[1] in print_clabels, enumerate(clabels)):
             pstr = f"{cl:<16}"
-            pstr += "".join([f"{s:<16.3f}" for s in list(cstats[i,:,j])])
+            pstr += "".join([
+                (f"{s:>16.3f},",f"{s:>16.3e}")[bool(s>1e12)]
+                for s in list(cstats[i,:,j])
+                ])
             print(pstr)
-    '''
+    #'''
 
+    #'''
     agg_mstats = np.stack([
         np.amin(mstats[:,0], axis=0),
         np.amax(mstats[:,1], axis=0),
@@ -181,12 +190,17 @@ if __name__=="__main__":
     print(f"## Bulk values calculated with {cstats.shape[0]} swaths")
     print("".join([f"{l:>16}," for l in ["field"]+list(stat_labels)]))
     ## Print MODIS fields as rows of statistics
-    for j,ml in enumerate(filter(lambda m:m in print_mlabels, mlabels)):
+    for j,ml in filter(lambda m:m[1] in print_mlabels, enumerate(mlabels)):
         pstr = f"{ml:>16},"
-        pstr += "".join([f"{s:>16.3f}," for s in list(agg_mstats[:,j])])
+        pstr += "".join([
+            (f"{s:>16.3f},",f"{s:>16.3e}")[bool(s>1e12)]
+            for s in list(agg_mstats[:,j])])
         print(pstr)
     ## Print CERES fields as rows of statistics
-    for j,cl in enumerate(filter(lambda c:c in print_clabels, clabels)):
+    for j,cl in filter(lambda c:c[1] in print_clabels, enumerate(clabels)):
         pstr = f"{cl:>16},"
-        pstr += "".join([f"{s:>16.3f}," for s in list(agg_cstats[:,j])])
+        pstr += "".join([
+            (f"{s:>16.3f},",f"{s:>16.3e}")[bool(s>1e12)]
+            for s in list(agg_cstats[:,j])])
         print(pstr)
+    #'''
