@@ -1,4 +1,8 @@
-"""  """
+"""
+Module containing data generators that load data from swath hdf5 files created
+by get_modis_swath, extract MODIS subgrids around each CERES footprint,
+and calculate the CERES PSF over the MODIS subgrids.
+"""
 #import gc
 import sys
 import random
