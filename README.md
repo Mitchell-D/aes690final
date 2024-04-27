@@ -1,11 +1,11 @@
 # aes690final
 
 <p align="center">
-    <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/banner.png?raw=true" />
+    <img src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/banner.png?raw=true" />
 </p>
 
 <p align="center">
-      <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/data_pipeline_overview.png?raw=true" />
+      <img src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/data_pipeline_overview.png?raw=true" />
 </p>
 
 ## get\_ceres\_swath.py
