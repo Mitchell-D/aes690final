@@ -120,6 +120,8 @@ CERES data that have already been processed by `get_ceres_swath.py`.
    each other in a user-specified number of value bins.
  - `scatter` plots two data values' magnitudes against each other
 
+## montage.sh
+
 <p align="center">
       <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/modis-quilt_5.png?raw=true" />
 </p>
