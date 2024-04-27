@@ -10,20 +10,20 @@ Take 2 on disaggregating CERES footprints to MODIS resolution.
 </p>
 
 <p align="center">
-    <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_flux-lw.png?raw=true" />
-    <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_flux-sw.png?raw=true" />
+    <img height="192" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_flux-lw.png?raw=true" />
+    <img height="192" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_flux-sw.png?raw=true" />
 </p>
 
 <p align="center">
-    <img height="128" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_rgb-dcp.png?raw=true" />
-    <img height="128" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_rgb-dust.png?raw=true" />
-    <img height="128" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_rgb-tc.png?raw=true" />
+    <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_rgb-dcp.png?raw=true" />
+    <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_rgb-dust.png?raw=true" />
+    <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_rgb-tc.png?raw=true" />
 </p>
 
 <p align="center"> CERES swath over the Northeast USA </p>
 
 <p align="center">
-      <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/data_pipeline_overview.png?raw=true" />
+      <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/data_pipeline_overview.png?raw=true" />
 </p>
 
 
