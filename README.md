@@ -120,13 +120,15 @@ CERES data that have already been processed by `get_ceres_swath.py`.
    each other in a user-specified number of value bins.
  - `scatter` plots two data values' magnitudes against each other
 
-## montage.sh
+## band samples
 
 <p align="center">
-      <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/modis-quilt_5.png?raw=true" />
+      <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/mosaics/mosaic_aqua_20.png?raw=true" />
+      <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/mosaics/mosaic_terra_52.png?raw=true" />
 </p>
 <p align="center">
-      MODIS tile mosaic, including Hindu Kush Himilayan region, North East US, Amazon Rainforest, and Indonesia.
+      Mosaics, of MODIS Aqua and Terra bands, respectively, in order
+      of increasing wavelength. Dead and noisy bands are a problem.
 </p>
 
 [1]:https://ceres-tool.larc.nasa.gov/ord-tool

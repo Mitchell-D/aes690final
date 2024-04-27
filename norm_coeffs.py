@@ -1,6 +1,8 @@
 
 ## (mean, stdev) for each MODIS band, in order of wavelength
 '''
+## TODO: if need to preserve spectral angle, reset all of these since they were
+## calculated on a smaller subset. Also bands 20 and 22 should be in BT
 modis_norm = [ ## band-specific normalization
     (8, (0.328, 0.251)), (9, (0.337, 0.245)), (3, (0.260, 0.159)),
     (10, (0.281, 0.179)), (11, (0.231, 0.126)), (12, (0.216, 0.112)),
@@ -39,8 +41,8 @@ modis_norm = [
         (26,(0.15, 0.15)),
         (6, (0.15, 0.15)),
         (7, (0.15, 0.15)),
-        (20,(0.15, 0.15)),
-        (22,(0.15, 0.15)),
+        (20,(273.15, 12.0)),
+        (22,(273.15, 12.0)),
         (21,(273.15, 12.0)),
         (23,(273.15, 12.0)),
         (24,(273.15, 12.0)),

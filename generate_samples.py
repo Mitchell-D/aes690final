@@ -168,7 +168,8 @@ def swaths_dataset(
         buf_size_mb=128,
         deterministic=False,
         mask_val=None,
-        seed=None
+        seed=None,
+        debug=False,
         ):
     """
     Opens multiple combined swath hdf5s (made by get_modis_swath) as
@@ -312,17 +313,21 @@ def swaths_dataset(
         P = P[...,np.newaxis]
 
         print(f"{P.shape[0]} samples taken from {swath_path}")
+
         """ Normalize per feature if requested """
         if not modis_feats_norm is None:
-            M = (M-modis_feats_norm[0])/modis_feats_norm[1]
+            moff,mgain = map(np.asarray, modis_feats_norm)
+            M = (M-moff)/mgain
         if not ceres_feats_norm is None:
-            G = (G-ceres_feats_norm[0])/ceres_feats_norm[1]
+            goff,ggain = map(np.asarray, ceres_feats_norm)
+            G = (G-goff)/ggain
         if not ceres_labels_norm is None:
-            C = (C-ceres_labels_norm[0])/ceres_labels_norm[1]
+            coff,cgain = map(np.asarray, ceres_labels_norm)
+            C = (C-coff)/cgain
 
         if not mask_val is None:
             nans = np.logical_not(np.isfinite(M))
-            if np.any(nans):
+            if debug and np.any(nans):
                 print(f"Replacing {np.count_nonzero(nans)} NaN values")
             M[nans] = mask_val
 
@@ -408,15 +413,14 @@ def get_tiles_h5(
                 "num_swath_procs":num_swath_procs,
                 "samples_per_swath":samples_per_swath,
                 "block_size":block_size,
-                "modis_feats_norm":tuple(modis_feats_norm[0]),
-                "ceres_labels_norm":tuple(ceres_labels_norm[0]),
-                "ceres_feats_norm":tuple(ceres_feats_norm[0]),
+                "modis_feats_norm":tuple(map(tuple,modis_feats_norm)),
+                "ceres_labels_norm":tuple(map(tuple,ceres_labels_norm)),
+                "ceres_feats_norm":tuple(map(tuple,ceres_feats_norm)),
                 "mask_val":mask_val,
                 "deterministic":deterministic,
                 "buf_size_mb":buf_size_mb,
                 "seed":seed,
                 }
-        print(swath_dataset_params)
         f["data"].attrs.update({
             "swath_dataset_params":json.dumps(swath_dataset_params)
             })
@@ -502,7 +506,6 @@ def tiles_dataset(
         ## extract one chunk at a time along batch dimension and yield data
         ## with the features ordered as requested.
         for c in DM.iter_chunks():
-            print(c)
             tmp_m = tf.convert_to_tensor(DM[c[0],...][...,midx])
             tmp_g = tf.convert_to_tensor(DG[c[0],...][...,gidx])
             tmp_p = tf.convert_to_tensor(DP[c[0],...])
@@ -527,6 +530,23 @@ def tiles_dataset(
             )
     return D
 
+def get_modis_mosaic(m):
+    """
+
+    """
+    mside = int(np.ceil(m.shape[-1]**(1/2)))
+    missing = mside**2 - m.shape[-1]
+    m = np.concatenate((m, np.zeros((*m.shape[:3],missing))), axis=-1)
+    mosaics = []
+    for i in range(m.shape[0]):
+        mosaics.append(np.concatenate([
+            np.concatenate([
+                gaussnorm(m[i,...,j*mside+k]) for k in range(mside)
+                ], axis=1)
+            for j in range(mside)
+            ], axis=0))
+    return np.stack(mosaics, axis=0)
+
 if __name__=="__main__":
     """
     The code below consists of a few basic implementations of each method in
@@ -535,29 +555,39 @@ if __name__=="__main__":
     debug = False
     data_dir = Path("data")
     fig_dir = Path("figures")
-    modis_swath_dir = data_dir.joinpath("swaths_val")
+    modis_swath_dir = data_dir.joinpath("swaths")
 
-    #'''
+    """
+    Unless you're generating images, you can probably comment these imports.
+    """
+    from plot_swath import gaussnorm
+    from krttdkit.operate import enhance as enh
+    from krttdkit.visualize import guitools as gt
+    from krttdkit.visualize import geoplot as gp
+
+
     """ Generate a new tiles hdf5 file from swath hdf5s """
     from norm_coeffs import modis_norm,ceres_norm,geom_norm
     (mlabels,mnorm),(clabels,cnorm),(glabels,gnorm) = map(
             lambda t:zip(*t), (modis_norm, ceres_norm, geom_norm))
-    tiles_h5_path = data_dir.joinpath(f"tiles_aqua_test-val.h5")
+    '''
+    tiles_h5_path = data_dir.joinpath(f"tiles_aqua_test-train.h5")
     get_tiles_h5(
             tile_h5_path=tiles_h5_path,
             swath_h5s=[
-                p for p in modis_swath_dir.iterdir() if "aqua" in p.name],
+                p for p in modis_swath_dir.iterdir() if "aqua" in p.name
+                ],
             modis_feats=mlabels,
             ceres_feats=glabels,
             ceres_labels=clabels,
             grid_size=48,
-            samples_per_swath=128,
+            samples_per_swath=256,
             block_size=8, ## deplete the swath per block
             modis_feats_norm=tuple(map(np.array, zip(*mnorm))),
             ceres_feats_norm=tuple(map(np.array, zip(*gnorm))),
             ceres_labels_norm=tuple(map(np.array, zip(*cnorm))),
             num_swath_procs=4,
-            mask_val=None,
+            mask_val=-9999.,
             deterministic=True,
             batch_chunk_size=128,
             max_tile_count=None,
@@ -565,25 +595,56 @@ if __name__=="__main__":
             seed=None,
             )
     exit(0)
-    #'''
+    '''
 
+    #'''
     """ Load a tiles dataset from an existing tiles file """
-    tiles_h5_path = data_dir.joinpath(f"tiles_aqua_test-val.h5")
+    tiles_h5s = [
+            data_dir.joinpath(f"tiles_aqua_test-val.h5"),
+            data_dir.joinpath(f"tiles_aqua_test-train.h5"),
+            #data_dir.joinpath(f"tiles_terra_test-val.h5"),
+            #data_dir.joinpath(f"tiles_terra_test-train.h5"),
+            ]
     tds = tiles_dataset(
-            tiles_h5s=tiles_h5_path,
-            modis_feats=(1,4,3),
+            tiles_h5s=tiles_h5s,
+            #modis_feats=(8,1,4,3,2,18,26,7,20,28,30,31,33,24,25),
+            modis_feats=mlabels,
             ceres_feats=("sza", "vza"),
             ceres_labels=("swflux", "lwflux"),
+            buf_size_mb=128.,
+            num_tiles_procs=5,
+            block_size=4,
+            deterministic=False,
             )
-    for (m,g,p),c in tds.batch(32):
-        print(m.shape, g.shape, p.shape, c.shape)
+    """ Use the tiles dataset to make a RGB mosaic of MODIS values"""
+    mosaic_path = fig_dir.joinpath("modis/mosaics")
+    mosaic_count = 0
+    mosaic_limit = 64
+    rgb_norm = lambda X:np.floor(
+        np.clip((X-np.amin(X))/np.ptp(X),0,.9999)*256
+        ).astype(np.uint8)
+    for (m,g,p),c in tds.batch(256):
+        m = m.numpy()
+        mosaics = get_modis_mosaic(m)
+        for i in range(mosaics.shape[0]):
+            #gt.quick_render(gt.scal_to_rgb(mosaics[i]))
+            mosaic_count += 1
+            if mosaic_count > mosaic_limit:
+                break
+                exit(0)
+            #'''
+            gp.generate_raw_image(
+                    rgb_norm(gt.scal_to_rgb(mosaics[i])),
+                    mosaic_path.joinpath(f"mosaic_aqua_{mosaic_count:02}.png")
+                    )
+            #'''
+        #m = gaussnorm(m)
+        #for i,l in enumerate(mlabels):
+        #    print(l, enh.array_stat(m[0,...,i]))
+    exit(0)
 
-    '''
+    #'''
     """ Generate data in real time from swath hdf5s  """
-    from krttdkit.operate import enhance as enh
-    from krttdkit.visualize import guitools as gt
-    from krttdkit.visualize import geoplot as gp
-
     g = swaths_dataset(
             swath_h5s=[s for s in modis_swath_dir.iterdir()],
             buf_size_mb=512,
@@ -591,8 +652,8 @@ if __name__=="__main__":
             num_swath_procs=3,
             samples_per_swath=16,
             block_size=2,
-            modis_feats=(8,1,4,3,2,18,5,26,7,20,27,28,30,31,33),
-            #modis_feats=None,
+            #modis_feats=(8,1,4,3,2,18,5,26,7,20,27,28,30,31,33),
+            modis_feats=None,
             ceres_labels=("swflux","lwflux"),
             ceres_feats=("sza", "vza"),
             )
@@ -616,4 +677,4 @@ if __name__=="__main__":
                         f"modis_tile/{bidx:02}-{j:03}_{cstr}.png"),
                     )
         bidx += 1
-    '''
+    #'''

@@ -16,16 +16,19 @@ from plot_ceres import geo_scatter
 from FeatureGridV2 import FeatureGridV2
 from FG1D import FG1D
 
-def gaussnorm(X,contrast=None,gamma=1):
+def gaussnorm(X, contrast=None, gamma=1):
     """
     Gauss-normalize the array, clip it at the `contrast` number of standard
     deviations, then normalize it to [0,1]. Then apply the gamma correction.
     """
-    X = (X-np.average(X))/np.std(X)
-    if not contrast is None:
-        X = np.clip(X, -contrast, contrast)
-    X = (X-np.amin(X))/np.ptp(X)
-    X = X**(1/gamma)
+    if (r:=np.std(X)) == 0.:
+        X = np.zeros(X.shape)
+    else:
+        X = (X-np.average(X))/r
+        if not contrast is None:
+            X = np.clip(X, -contrast, contrast)
+        X = (X-np.amin(X))/np.ptp(X)
+        X = X**(1/gamma)
     return X
 
 if __name__=="__main__":
