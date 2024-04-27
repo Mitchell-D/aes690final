@@ -1,7 +1,8 @@
 # aes690final
 
-Take 2 on disaggregating CERES footprints to MODIS resolution.
-
+<p align="center">
+    <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/banner.png?raw=true" />
+</p>
 
 <p align="center">
     <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_flux-lw.png?raw=true" />
