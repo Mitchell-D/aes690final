@@ -395,13 +395,14 @@ def get_tiles_h5(
                 )
         DC = f.create_dataset(
                 name="/data/ceres",
-                shape=(0, 1, 1, len(ceres_labels)),
-                maxshape=(None, 1, 1, len(ceres_labels)),
-                chunks=(batch_chunk_size, 1, 1, len(ceres_labels)),
+                shape=(0, len(ceres_labels)),
+                maxshape=(None, len(ceres_labels)),
+                chunks=(batch_chunk_size, len(ceres_labels)),
                 )
         swath_dataset_params = {
                 "swath_h5s":list(map(lambda p:p.as_posix(), swath_h5s)),
                 "modis_feats":modis_feats,
+                "ceres_feats":ceres_feats,
                 "ceres_labels":ceres_labels,
                 "grid_size":grid_size,
                 "num_swath_procs":num_swath_procs,
@@ -431,22 +432,113 @@ def get_tiles_h5(
             DM[s,...] = m.numpy()
             DG[s,...] = g.numpy()
             DP[s,...] = p.numpy()
-            DC[s,...] = c[:,np.newaxis,np.newaxis,:].numpy()
+            DC[s,...] = c[...].numpy()
             f.flush()
         f.close()
     return tile_h5_path
 
-def tiles_dataset(tiles_h5s:list):
-    pass
+def tiles_dataset(
+        tiles_h5s:list, modis_feats, ceres_feats, ceres_labels,
+        buf_size_mb=128., num_tiles_procs=1, block_size=1, deterministic=True):
+    """
+    Returns a tensorflow dataset that interleaves data from one or more
+    tiles files that were previously created by get_tiles_h5
+
+    BEWARE this method doesn't check whether the normalization coefficients
+    are consistent between the tiles h5s.
+    """
+
+    if isinstance(tiles_h5s, str):
+        tiles_h5s = Path(tiles_h5s)
+    if isinstance(tiles_h5s,Path):
+        tiles_h5s = [tiles_h5s]
+
+    ## Load the attribute dictionaries containing each tiles h5's parameters
+    ## which were used to call swath_dataset for the tiles h5 creation.
+    tiles_attrs = {}
+    for p in tiles_h5s:
+        f = h5py.File(p, mode="r")
+        tmp_attrs = json.loads(f["data"].attrs["swath_dataset_params"])
+        tiles_attrs[p.as_posix()] = tmp_attrs
+        f.close()
+    sample_attrs = list(tiles_attrs.values())[0]
+
+    ## infer the output shapes from the first tiles attrs dict.
+    grid_shape = (sample_attrs["grid_size"], sample_attrs["grid_size"])
+    out_sig = ((
+        tf.TensorSpec(shape=(*grid_shape, len(modis_feats)), dtype=tf.float64),
+        tf.TensorSpec(shape=(*grid_shape, len(ceres_feats)), dtype=tf.float64),
+        tf.TensorSpec(shape=(*grid_shape, 1), dtype=tf.float64),
+        ),tf.TensorSpec(shape=(len(ceres_labels),), dtype=tf.float64))
+
+    def _gen_tiles(tiles_file):
+        """
+        yields ((modis, geom, psf), ceres) tensors from a single tile file
+        """
+        tiles_file = tiles_file.decode()
+        f_swath = h5py.File(
+                tiles_file,
+                mode="r",
+                rdcc_nbytes=buf_size_mb*1024**2,
+                rdcc_nslots=buf_size_mb*15,
+                )
+        info = json.loads(f_swath["data"].attrs["swath_dataset_params"])
+        ## make sure all the requested bands are present by checking the
+        ## parameters used to initialize swaths_dataset
+        assert all(l in info["modis_feats"] for l in modis_feats),tiles_file
+        assert all(l in info["ceres_feats"] for l in ceres_feats),tiles_file
+        assert all(l in info["ceres_labels"] for l in ceres_labels),tiles_file
+
+        midx = tuple(info["modis_feats"].index(l) for l in modis_feats)
+        gidx = tuple(info["ceres_feats"].index(l) for l in ceres_feats)
+        cidx = tuple(info["ceres_labels"].index(l) for l in ceres_labels)
+
+        ## Load the hdf5 datasets
+        DM = f_swath["/data/modis"]
+        DG = f_swath["/data/geom"]
+        DP = f_swath["/data/psf"]
+        DC = f_swath["/data/ceres"]
+
+        ## extract one chunk at a time along batch dimension and yield data
+        ## with the features ordered as requested.
+        for c in DM.iter_chunks():
+            print(c)
+            tmp_m = tf.convert_to_tensor(DM[c[0],...][...,midx])
+            tmp_g = tf.convert_to_tensor(DG[c[0],...][...,gidx])
+            tmp_p = tf.convert_to_tensor(DP[c[0],...])
+            tmp_c = tf.convert_to_tensor(DC[c[0],...][...,cidx])
+            for i in range(tmp_m.shape[0]):
+                yield ((tmp_m[i], tmp_g[i], tmp_p[i]), tmp_c[i])
+        f_swath.close()
+
+
+    tiles_h5s = tf.data.Dataset.from_tensor_slices(
+            list(map(lambda p:p.as_posix(), map(Path,tiles_h5s))))
+    D = tiles_h5s.interleave(
+            lambda fpath: tf.data.Dataset.from_generator(
+                generator=_gen_tiles,
+                args=(fpath,),
+                output_signature=out_sig,
+                ),
+            cycle_length=num_tiles_procs,
+            num_parallel_calls=num_tiles_procs,
+            block_length=block_size,
+            deterministic=deterministic,
+            )
+    return D
 
 if __name__=="__main__":
+    """
+    The code below consists of a few basic implementations of each method in
+    this module which are mainly for debugging and sanity checks.
+    """
     debug = False
     data_dir = Path("data")
     fig_dir = Path("figures")
     modis_swath_dir = data_dir.joinpath("swaths_val")
 
     #'''
-    """ Generate a new hdf5 file from swath hdf5s """
+    """ Generate a new tiles hdf5 file from swath hdf5s """
     from norm_coeffs import modis_norm,ceres_norm,geom_norm
     (mlabels,mnorm),(clabels,cnorm),(glabels,gnorm) = map(
             lambda t:zip(*t), (modis_norm, ceres_norm, geom_norm))
@@ -459,7 +551,7 @@ if __name__=="__main__":
             ceres_feats=glabels,
             ceres_labels=clabels,
             grid_size=48,
-            samples_per_swath=256,
+            samples_per_swath=128,
             block_size=8, ## deplete the swath per block
             modis_feats_norm=tuple(map(np.array, zip(*mnorm))),
             ceres_feats_norm=tuple(map(np.array, zip(*gnorm))),
@@ -475,7 +567,16 @@ if __name__=="__main__":
     exit(0)
     #'''
 
-
+    """ Load a tiles dataset from an existing tiles file """
+    tiles_h5_path = data_dir.joinpath(f"tiles_aqua_test-val.h5")
+    tds = tiles_dataset(
+            tiles_h5s=tiles_h5_path,
+            modis_feats=(1,4,3),
+            ceres_feats=("sza", "vza"),
+            ceres_labels=("swflux", "lwflux"),
+            )
+    for (m,g,p),c in tds.batch(32):
+        print(m.shape, g.shape, p.shape, c.shape)
 
     '''
     """ Generate data in real time from swath hdf5s  """
