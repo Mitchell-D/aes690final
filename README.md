@@ -14,7 +14,8 @@ Take 2 on disaggregating CERES footprints to MODIS resolution.
       <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/neus_20200530-1808_aqua_rgb-dust.png?raw=true" />
 </p>
 
-<p align="center"> CERES swath over the Northeast USA (shortwave and longwave flux), and co-located MODIS truecolor, day cloud phase, and dust RGBs. </p>
+<p align="center"> CERES swath over the Northeast USA (shortwave and longwave flux),</p>
+<p align="center"> and co-located MODIS truecolor, day cloud phase, and dust RGBs. </p>
 
 <p align="center">
       <img height="512" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/data_pipeline_overview.png?raw=true" />
