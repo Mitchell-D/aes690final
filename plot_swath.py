@@ -9,23 +9,12 @@ from datetime import datetime
 from multiprocessing import Pool
 from pprint import pprint as ppt
 
-from krttdkit.operate import enhance as enh
 from krttdkit.visualize import guitools as gt
 from krttdkit.visualize import geoplot as gp
 
 from plot_ceres import geo_scatter
 from FeatureGridV2 import FeatureGridV2
 from FG1D import FG1D
-
-def feature_stats(modis:FeatureGridV2, feature_labels=None):
-    if feature_labels is None:
-        feature_labels = modis.flabels
-    for fl in feature_labels:
-        metrics = ("mean", "stddev", "min", "max",
-                   "nanmin", "nanmax", "nancount")
-        tmp_stat = enh.array_stat(modis.data(fl))
-        tmp_str = ", ".join([f"{m}:{tmp_stat[m]:.4f}" for m in metrics])
-        print(fl,tmp_str)
 
 def gaussnorm(X,contrast=None,gamma=1):
     """
