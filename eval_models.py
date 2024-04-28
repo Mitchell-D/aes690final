@@ -51,13 +51,13 @@ if __name__=="__main__":
     rng = np.random.default_rng(seed=seed)
 
     """ Load the model """
-    md = ModelDir(Path("data/models/test-15/"))
+    md = ModelDir(Path("data/models/ceda-0/"))
     #model = md.load_weights("test-10_002_2.061.weights.h5")
     #model = md.load_weights("test-11_010_2.274.weights.h5")
     #model = md.load_weights("test-12_008_2.046.weights.h5") ## looks good
     #model = md.load_weights("test-12_final.weights.h5")
     #model = md.load_weights("test-13_043_6.213.weights.h5")
-    model = md.load_weights("test-15_final.weights.h5")
+    model = md.load_weights("ceda-0_003_2.517.weights.h5")
     ppt(md.config)
 
     """ """
@@ -87,14 +87,14 @@ if __name__=="__main__":
 
         ## convolutional encoder disaggregator
         ## or convolutional-encoder-decoder-aggregator
-        model_path = md.dir.joinpath("ceda.keras")
-        model.save(model_path)
+        #model_path = md.dir.joinpath("ceda.keras")
+        #model.save(model_path)
 
         ## Create a new model for the
         #paed = tf.keras.Model(model.input, model.get_layer("dec_out").output)
         paed = tf.keras.Model(
                 model.input,
-                model.get_layer("square_reg").output
+                model.get_layer("join_dec-agg").output
                 #model.get_layer("dec_out_dec-agg").output
                 )
 

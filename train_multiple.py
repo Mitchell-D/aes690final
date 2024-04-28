@@ -28,8 +28,8 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"test-15",
-        "model_type":"paed",
+        "model_name":"ceda-0",
+        "model_type":"ceda",
         "seed":200007221752,
 
         "num_latent_feats":32,

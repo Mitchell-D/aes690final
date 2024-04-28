@@ -134,10 +134,11 @@ CERES data that have already been processed by `get_ceres_swath.py`.
 ## PAED model architecture
 
 <p align="center">
-      <img src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/paed-sample.png?raw=true" />
+      <img src="https://github.com/Mitchell-D/aes690final/blob/main/figures/data/models/ceda-0/ceda-0.png?raw=true" />
 </p>
 <p align="center">
-      Sample "pixel-wise aggregate encoder-decoder" (PAED) architecture
+      ceda model architecture. Stands for either convolutional
+      encoder-disaggregator or convolutional-encoder-decoder-aggregator
 </p>
 
 [1]:https://ceres-tool.larc.nasa.gov/ord-tool
