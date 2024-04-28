@@ -1,6 +1,6 @@
 {
     "model_name": "test-1",
-    "model_type": "paed",
+    "model_type": "paed_old",
     "random_seed": null,
     "num_latent_feats": 8,
     "modis_feats": [

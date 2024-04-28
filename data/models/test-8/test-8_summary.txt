@@ -1,0 +1,68 @@
+Model: "model_1"
+__________________________________________________________________________________________________
+ Layer (type)                Output Shape                 Param #   Connected to                  
+==================================================================================================
+ in_modis (InputLayer)       [(None, None, None, 13)]     0         []                            
+                                                                                                  
+ enc_conv_0 (Conv2D)         (None, None, None, 128)      1792      ['in_modis[0][0]']            
+                                                                                                  
+ enc_bn_0 (BatchNormalizati  (None, None, None, 128)      512       ['enc_conv_0[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_1 (Conv2D)         (None, None, None, 128)      16512     ['enc_bn_0[0][0]']            
+                                                                                                  
+ enc_bn_1 (BatchNormalizati  (None, None, None, 128)      512       ['enc_conv_1[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_2 (Conv2D)         (None, None, None, 64)       8256      ['enc_bn_1[0][0]']            
+                                                                                                  
+ enc_bn_2 (BatchNormalizati  (None, None, None, 64)       256       ['enc_conv_2[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_3 (Conv2D)         (None, None, None, 64)       4160      ['enc_bn_2[0][0]']            
+                                                                                                  
+ enc_bn_3 (BatchNormalizati  (None, None, None, 64)       256       ['enc_conv_3[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_4 (Conv2D)         (None, None, None, 64)       4160      ['enc_bn_3[0][0]']            
+                                                                                                  
+ enc_bn_4 (BatchNormalizati  (None, None, None, 64)       256       ['enc_conv_4[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_out (Conv2D)            (None, None, None, 32)       2080      ['enc_bn_4[0][0]']            
+                                                                                                  
+ in_geom (InputLayer)        [(None, None, None, 2)]      0         []                            
+                                                                                                  
+ model (Functional)          (None, None, None, 2)        5018      ['enc_out[0][0]',             
+                                                                     'in_geom[0][0]',             
+                                                                     'tf.__operators__.getitem[0][
+                                                                    0]',                          
+                                                                     'tf.math.reduce_mean[0][0]'] 
+                                                                                                  
+ square_reg_layer (SquareRe  (None, None, None, 2)        0         ['model[0][0]']               
+ gLayer)                                                                                          
+                                                                                                  
+ in_psf (InputLayer)         [(None, None, None, 1)]      0         []                            
+                                                                                                  
+ psf (Lambda)                multiple                     0         ['square_reg_layer[0][0]',    
+                                                                     'in_psf[0][0]',              
+                                                                     'enc_out[0][0]',             
+                                                                     'in_psf[0][0]']              
+                                                                                                  
+ tf.__operators__.getitem (  (None, 1, 1, 32)             0         ['psf[1][0]']                 
+ SlicingOpLambda)                                                                                 
+                                                                                                  
+ tf.math.reduce_mean (TFOpL  (None, 1, 1, 2)              0         ['in_geom[0][0]']             
+ ambda)                                                                                           
+                                                                                                  
+ tf.__operators__.add (TFOp  (None, 1, None, 2)           0         ['psf[0][0]',                 
+ Lambda)                                                             'model[1][0]']               
+                                                                                                  
+ tf.math.truediv (TFOpLambd  (None, 1, None, 2)           0         ['tf.__operators__.add[0][0]']
+ a)                                                                                               
+                                                                                                  
+==================================================================================================
+Total params: 43770 (170.98 KB)
+Trainable params: 42666 (166.66 KB)
+Non-trainable params: 1104 (4.31 KB)
+__________________________________________________________________________________________________

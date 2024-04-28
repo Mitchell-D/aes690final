@@ -48,44 +48,59 @@ if __name__=="__main__":
     seed = None
     rng = np.random.default_rng(seed=seed)
 
-    md = ModelDir(Path("data/models/test-1/"))
-    model = md.load_weights("test-1_046_0.080.weights.h5")
+    """ Load the model """
+    md = ModelDir(Path("data/models/test-9/"))
+    model = md.load_weights("test-9_012_2.096.weights.h5")
     ppt(md.config)
 
+    """ """
     swath_paths = list(swath_dir.iterdir())
     rng.shuffle(swath_paths)
 
-    ceres,modis = load_swath(swath_paths.pop())
-    print(ceres.labels, modis.flabels)
+    ## load a single swath
+    for sp in swath_paths:
+        ceres,modis = load_swath(sp)
+        m = modis.data(md.config["modis_feats"])[np.newaxis,:256,:256,...]
+        c = ceres.data(md.config["ceres_labels"])
+        ## use average geometry conditions for rough estimate since MODIS
+        ## geometryscale is currently messed up.
+        g = np.zeros((*m.shape[:-1],2))
+        g[...,1] += 1
+        ## Fully express every pixel
+        p = np.full((*m.shape[:-1],1),1)
 
-    m = modis.data(md.config["modis_feats"])[np.newaxis,:256,:256,...]
-    c = ceres.data(md.config["ceres_labels"])
-    #g = modis.data(("sza", "vza", "saa"))[np.newaxis,:256,:256,...]
-    p = np.full((*m.shape[:-1],1),1)
+        mmean,mstd = zip(*[modis_norm[k] for k in md.config["modis_feats"]])
+        gmean,gstd = zip(*[geom_norm[k] for k in md.config["ceres_feats"]])
+        cmean,cstd = zip(*[ceres_norm[k] for k in md.config["ceres_labels"]])
 
-    mmean,mstd = zip(*[modis_norm[k] for k in md.config["modis_feats"]])
-    gmean,gstd = zip(*[geom_norm[k] for k in md.config["ceres_feats"]])
-    cmean,cstd = zip(*[ceres_norm[k] for k in md.config["ceres_labels"]])
+        m = (m-mmean)/mstd
+        #g = (g-gmean)/gstd
 
-    m = (m-mmean)/mstd
-    #g = (g-gmean)/gstd
-    g = np.zeros((*m.shape[:-1],3))
-    g[...,1] += 1
+        print(m.shape, g.shape, c.shape, p.shape)
+        print(np.average(m), np.amin(m), np.amax(m))
+        print(np.average(g), np.amin(g), np.amax(g))
+        print(np.average(p), np.amax(p), np.sum(p))
 
-    print(m.shape, g.shape, c.shape, p.shape)
-    print(np.average(m), np.amin(m), np.amax(m))
-    print(np.average(g), np.amin(g), np.amax(g))
-    print(np.average(p), np.amax(p), np.sum(p))
+        ## Create a new model for the
+        #paed = tf.keras.Model(model.input, model.get_layer("dec_out").output)
+        paed = tf.keras.Model(
+                model.input,
+                model.get_layer("square_reg_layer").output
+                )
 
-    paed = tf.keras.Model(model.input, model.get_layer("dec_out").output)
-    print(cstd, cmean)
-    disagg = paed((m,g,p)) * np.array(cstd) + np.array(cmean)
+        print(cstd, cmean)
+        disagg = paed((m,g,p)) * np.array(cstd) + np.array(cmean)
 
-    print(disagg.shape)
-    print(np.amin(disagg[...,0]), np.amax(disagg[...,1]))
+        print(disagg.shape)
+        print(np.amin(disagg[...,0]),
+              np.average(disagg[...,0]),
+              np.amax(disagg[...,0]))
+        print(np.amin(disagg[...,1]),
+              np.average(disagg[...,1]),
+              np.amax(disagg[...,1]))
 
-    gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,0]))
-    gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,1]))
+        gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,0]))
+        gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,1]))
 
     exit(0)
 

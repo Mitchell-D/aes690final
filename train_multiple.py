@@ -13,12 +13,9 @@ from tracktrain.VariationalEncoderDecoder import VariationalEncoderDecoder
 from tracktrain.ModelDir import ModelDir
 from tracktrain.compile_and_train import train
 
-from generate_samples import swaths_dataset
+from generate_samples import swaths_dataset,tiles_dataset
 from get_modis_swath import modis_band_to_wl
 from check_swaths import parse_swath_path
-
-train_swath_dir = Path("data/swaths")
-val_swath_dir = Path("data/swaths_val")
 
 """ Establish normalization bounds based on bulk stats from check_swaths """
 from norm_coeffs import modis_norm,ceres_norm,geom_norm
@@ -31,16 +28,22 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"test-5",
+        "model_name":"test-9",
         "model_type":"paed",
-        "random_seed":200007221752,
+        "seed":200007221752,
 
-        "num_latent_feats":16,
+        "num_latent_feats":32,
+        "kernel_size":1,
+        "square_regularization_coeff":.2,
+        "share_decoder_weights":True,
+
+        ## bands 21-25 and 27 have nan values;
+        ## striping and noise issues still present with others.
         "modis_feats":(8,1,4,3,2,18,26,7,20,28,30,31,33),
         "ceres_feats":("sza","vza"),
         "ceres_labels":("swflux", "lwflux"),
 
-        "enc_conv_filters":[32,32,32],
+        "enc_conv_filters":[128,128,64,64,64],
         "enc_activation":"relu",
         "enc_use_bias":True,
         "enc_kwargs":{},
@@ -48,7 +51,7 @@ config = {
         "enc_dropout":0.,
         "enc_batchnorm":True,
 
-        "dec_conv_filters":[32,8],
+        "dec_conv_filters":[64,32,8],
         "dec_activation":"relu",
         "dec_use_bias":True,
         "dec_kwargs":{},
@@ -57,7 +60,7 @@ config = {
         "dec_batchnorm":True,
 
         ## Exclusive to compile_and_build_dir
-        "learning_rate":1e-3,
+        "learning_rate":1e-2,
         "loss":"mse",
         "metrics":["mse", "mae"],
         "weighted_metrics":["mse", "mae"],
@@ -85,14 +88,14 @@ config = {
         "val_regions":("neus",),
         "val_sats":("aqua",),
 
-        "notes":"small decoder, random seed, limited training domain, and faster learning rate over neus",
+        "notes":"Trying to tune regularization",
         }
 ## Count each of the input types for the generators' init function
 config["num_modis_feats"] = len(config["modis_feats"])
 config["num_ceres_feats"] = len(config["ceres_feats"])
 config["num_ceres_labels"] = len(config["ceres_labels"])
 
-rng = np.random.default_rng(seed=config["random_seed"])
+rng = np.random.default_rng(seed=config["seed"])
 
 """ Initialize the training and validation data generators given the config """
 
@@ -104,11 +107,21 @@ gmean,gstdev = map(
 cmean,cstdev = map(
         np.array,zip(*[cnorm[band] for band in config["ceres_labels"]]))
 
+
+'''
+"""
+Provide the training and validation inputs with a collection of swath hdf5s
+by calling generate_samples.swaths_dataset to get a tensorflow dataset.
+The swath hdf5s must have been created by get_modis_swath.get_modis_swath
+"""
 max_train_swaths = 120
 max_val_swaths = 60
-
 ## select the swath hdf5 files to use for training and validation
-train_h5s,train_swath_ids = zip(*[
+
+train_swath_dir = Path("data/swaths")
+val_swath_dir = Path("data/swaths_val")
+
+swath_h5s,train_swath_ids = zip(*[
     (s,parse_swath_path(s, True))
     for s in rng.permuted(list(train_swath_dir.iterdir()))
     if any(sat in s.stem for sat in config["train_sats"])
@@ -120,44 +133,50 @@ val_h5s,val_swath_ids = zip(*[
     if any(sat in s.stem for sat in config["val_sats"])
     and any(region in s.stem for region in config["train_regions"])
     ][:max_val_swaths])
-
 ## save each swath's unique ID as a 3-tuple (region, satellite, epoch_time)
 config["swaths_train"] = train_swath_ids
 config["swaths_val"] = val_swath_ids
 config["modis_feats_norm"] = tuple(mmean),tuple(mstdev)
 config["ceres_feats_norm"] = tuple(gmean),tuple(gstdev)
 config["ceres_labels_norm"] = tuple(cmean),tuple(cstdev)
+config["swath_h5s_train"] = list(map(lambda p:p.as_posix(), swath_h5s))
+config["swath_h5s_val"] = list(map(lambda p:p.as_posix(),  val_h5s))
+## use the configuration to create training and validation datasets.
+tgen = swaths_dataset(swath_h5s=config["swath_h5s_train"], **config)
+vgen = swaths_dataset(swath_h5s=config["swath_h5s_val"], **config)
+'''
 
-tgen = swaths_dataset(
-        swath_h5s=train_h5s,
-        grid_size=config["modis_grid_size"],
-        num_swath_procs=config["num_swath_procs"],
-        samples_per_swath=config["samples_per_swath"],
-        block_size=config["block_size"],
-        buf_size_mb=config["buf_size_mb"],
-        modis_feats=config["modis_feats"],
-        ceres_labels=config["ceres_labels"],
-        ceres_feats=config["ceres_feats"],
-        modis_feats_norm=(mmean,mstdev),
-        ceres_feats_norm=(gmean,gstdev),
-        ceres_labels_norm=(cmean,cstdev),
-        seed=config["random_seed"],
+
+#'''
+"""
+Provide the training and validation inputs with a collection of tiles hdf5s
+by calling generate_samples.tiles_dataset to get a tensorflow dataset.
+The tiles hdf5s must have been created by generate_samples.get_tiles_h5
+"""
+train_tiles_dir = Path("data/tiles")
+val_tiles_dir = Path("data/tiles_val")
+config["tiles_h5s_train"] = list(map(
+    lambda p:train_tiles_dir.joinpath(p).as_posix(),
+    ("tiles_terra_test_train.h5", "tiles_aqua_test_train.h5")))
+config["tiles_h5s_val"] = list(map(
+    lambda p:val_tiles_dir.joinpath(p).as_posix(),
+    ("tiles_terra_test_val.h5", "tiles_aqua_test_val.h5")))
+tgen = tiles_dataset(tiles_h5s=config["tiles_h5s_train"], **config)
+vgen = tiles_dataset(tiles_h5s=config["tiles_h5s_val"], **config)
+
+'''
+vgen = tiles_dataset(
+        tiles_h5s=tiles_h5s_val,
+        #modis_feats=(8,1,4,3,2,18,26,7,20,28,30,31,33,24,25),
+        modis_feats=mlabels,
+        ceres_feats=("sza", "vza"),
+        ceres_labels=("swflux", "lwflux"),
+        buf_size_mb=128.,
+        num_tiles_procs=5,
+        block_size=4,
+        deterministic=False,
         )
-vgen = swaths_dataset(
-        swath_h5s=val_h5s,
-        grid_size=config["modis_grid_size"],
-        num_swath_procs=config["num_swath_procs"],
-        samples_per_swath=config["samples_per_swath"],
-        block_size=config["block_size"],
-        buf_size_mb=config["buf_size_mb"],
-        modis_feats=config["modis_feats"],
-        ceres_labels=config["ceres_labels"],
-        ceres_feats=config["ceres_feats"],
-        modis_feats_norm=(mmean,mstdev),
-        ceres_feats_norm=(gmean,gstdev),
-        ceres_labels_norm=(cmean,cstdev),
-        seed=config["random_seed"],
-        )
+'''
 
 """ Initialize the model, and build its directory """
 model,md = ModelDir.build_from_config(
@@ -166,12 +185,13 @@ model,md = ModelDir.build_from_config(
         print_summary=False,
         )
 
-'''
+#'''
 """ optionally generate an image model diagram ; has `pydot` dependency """
 from keras.utils import plot_model
 plot_model(model, to_file=md.dir.joinpath(f"{md.name}.png"),
-           show_shapes=True, show_layer_names=True)
-'''
+           show_shapes=True, show_layer_names=True, expand_nested=True,
+           show_layer_activations=True)
+#'''
 
 '''
 """ take a look at the data from the generator as a sanity check """

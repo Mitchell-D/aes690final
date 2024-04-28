@@ -1,0 +1,106 @@
+Model: "model"
+__________________________________________________________________________________________________
+ Layer (type)                Output Shape                 Param #   Connected to                  
+==================================================================================================
+ in_modis (InputLayer)       [(None, None, None, 13)]     0         []                            
+                                                                                                  
+ enc_conv_0 (Conv2D)         (None, None, None, 128)      1792      ['in_modis[0][0]']            
+                                                                                                  
+ enc_bn_0 (BatchNormalizati  (None, None, None, 128)      512       ['enc_conv_0[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_1 (Conv2D)         (None, None, None, 128)      16512     ['enc_bn_0[0][0]']            
+                                                                                                  
+ enc_bn_1 (BatchNormalizati  (None, None, None, 128)      512       ['enc_conv_1[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_2 (Conv2D)         (None, None, None, 64)       8256      ['enc_bn_1[0][0]']            
+                                                                                                  
+ enc_bn_2 (BatchNormalizati  (None, None, None, 64)       256       ['enc_conv_2[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_3 (Conv2D)         (None, None, None, 64)       4160      ['enc_bn_2[0][0]']            
+                                                                                                  
+ enc_bn_3 (BatchNormalizati  (None, None, None, 64)       256       ['enc_conv_3[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_conv_4 (Conv2D)         (None, None, None, 64)       4160      ['enc_bn_3[0][0]']            
+                                                                                                  
+ enc_bn_4 (BatchNormalizati  (None, None, None, 64)       256       ['enc_conv_4[0][0]']          
+ on)                                                                                              
+                                                                                                  
+ enc_out (Conv2D)            (None, None, None, 32)       2080      ['enc_bn_4[0][0]']            
+                                                                                                  
+ in_geom (InputLayer)        [(None, None, None, 2)]      0         []                            
+                                                                                                  
+ concat_geom_dec-agg (Conca  (None, None, None, 34)       0         ['enc_out[0][0]',             
+ tenate)                                                             'in_geom[0][0]']             
+                                                                                                  
+ dec_conv_dec-agg_0 (Conv2D  (None, None, None, 64)       2240      ['concat_geom_dec-agg[0][0]'] 
+ )                                                                                                
+                                                                                                  
+ dec_bn_dec-agg_0 (BatchNor  (None, None, None, 64)       256       ['dec_conv_dec-agg_0[0][0]']  
+ malization)                                                                                      
+                                                                                                  
+ dec_conv_dec-agg_1 (Conv2D  (None, None, None, 32)       2080      ['dec_bn_dec-agg_0[0][0]']    
+ )                                                                                                
+                                                                                                  
+ dec_bn_dec-agg_1 (BatchNor  (None, None, None, 32)       128       ['dec_conv_dec-agg_1[0][0]']  
+ malization)                                                                                      
+                                                                                                  
+ dec_conv_dec-agg_2 (Conv2D  (None, None, None, 8)        264       ['dec_bn_dec-agg_1[0][0]']    
+ )                                                                                                
+                                                                                                  
+ dec_bn_dec-agg_2 (BatchNor  (None, None, None, 8)        32        ['dec_conv_dec-agg_2[0][0]']  
+ malization)                                                                                      
+                                                                                                  
+ dec_out_dec-agg (Conv2D)    (None, None, None, 2)        18        ['dec_bn_dec-agg_2[0][0]']    
+                                                                                                  
+ in_psf (InputLayer)         [(None, None, None, 1)]      0         []                            
+                                                                                                  
+ psf (Lambda)                multiple                     0         ['dec_out_dec-agg[0][0]',     
+                                                                     'in_psf[0][0]',              
+                                                                     'enc_out[0][0]',             
+                                                                     'in_psf[0][0]']              
+                                                                                                  
+ tf.__operators__.getitem (  (None, 1, 1, 32)             0         ['psf[1][0]']                 
+ SlicingOpLambda)                                                                                 
+                                                                                                  
+ tf.math.reduce_mean (TFOpL  (None, 1, 1, 2)              0         ['in_geom[0][0]']             
+ ambda)                                                                                           
+                                                                                                  
+ concat_geom_agg-dec (Conca  (None, 1, 1, 34)             0         ['tf.__operators__.getitem[0][
+ tenate)                                                            0]',                          
+                                                                     'tf.math.reduce_mean[0][0]'] 
+                                                                                                  
+ dec_conv_agg-dec_0 (Conv2D  (None, 1, 1, 64)             2240      ['concat_geom_agg-dec[0][0]'] 
+ )                                                                                                
+                                                                                                  
+ dec_bn_agg-dec_0 (BatchNor  (None, 1, 1, 64)             256       ['dec_conv_agg-dec_0[0][0]']  
+ malization)                                                                                      
+                                                                                                  
+ dec_conv_agg-dec_1 (Conv2D  (None, 1, 1, 32)             2080      ['dec_bn_agg-dec_0[0][0]']    
+ )                                                                                                
+                                                                                                  
+ dec_bn_agg-dec_1 (BatchNor  (None, 1, 1, 32)             128       ['dec_conv_agg-dec_1[0][0]']  
+ malization)                                                                                      
+                                                                                                  
+ dec_conv_agg-dec_2 (Conv2D  (None, 1, 1, 8)              264       ['dec_bn_agg-dec_1[0][0]']    
+ )                                                                                                
+                                                                                                  
+ dec_bn_agg-dec_2 (BatchNor  (None, 1, 1, 8)              32        ['dec_conv_agg-dec_2[0][0]']  
+ malization)                                                                                      
+                                                                                                  
+ dec_out_agg-dec (Conv2D)    (None, 1, 1, 2)              18        ['dec_bn_agg-dec_2[0][0]']    
+                                                                                                  
+ tf.__operators__.add (TFOp  (None, 1, None, 2)           0         ['psf[0][0]',                 
+ Lambda)                                                             'dec_out_agg-dec[0][0]']     
+                                                                                                  
+ tf.math.truediv (TFOpLambd  (None, 1, None, 2)           0         ['tf.__operators__.add[0][0]']
+ a)                                                                                               
+                                                                                                  
+==================================================================================================
+Total params: 48788 (190.58 KB)
+Trainable params: 47476 (185.45 KB)
+Non-trainable params: 1312 (5.12 KB)
+__________________________________________________________________________________________________

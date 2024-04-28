@@ -56,7 +56,11 @@ def _psf_conditionals(beta, delta):
     """
     a = .65 ## FOV angular bound
     ## PSF is symmetric over cross-track scan line
-    abs_beta = np.abs(beta)
+    ## Sometimes values are anomalously high; the cross-track scan angle should
+    ## never be more than a few degrees, so just clip it to avoid overflow.
+    ## The PSF will evaluate to zero at this distance in any case.
+    abs_beta = np.clip(np.abs(beta), 0., 6.)
+    delta = np.clip(delta, -6., 6.)
     #print(np.amin(abs_beta), np.amax(abs_beta), np.amin(delta), np.amax(delta))
     ## Describes the boundary of the hexagonal optical FOV
     d_f = np.where(abs_beta<a, -1*a, -2*a+abs_beta)
@@ -161,7 +165,7 @@ def swaths_dataset(
         modis_feats_norm:tuple=None,
         ceres_labels_norm:tuple=None,
         ceres_feats_norm:tuple=None,
-        grid_size=48,
+        modis_grid_size=48,
         num_swath_procs=1,
         samples_per_swath=128,
         block_size=32,
@@ -170,13 +174,14 @@ def swaths_dataset(
         mask_val=None,
         seed=None,
         debug=False,
+        **kwargs,
         ):
     """
     Opens multiple combined swath hdf5s (made by get_modis_swath) as
     dataset generators, and interleaves their results.
 
     :@param swath_h5s: Paths to combined swath hdf5 files to generate the data
-    :@param grid_size: Side length of the generated MODIS tile domain
+    :@param modis_grid_size: Side length of the generated MODIS tile domain
     :@param modis_feats: MODIS band labels used for features, in order.
     :@param modis_feats_norm: 2-tuple (offset,gain) of None or array with
         size=len(modis_feats) values to normalize each MODIS band like
@@ -198,10 +203,14 @@ def swaths_dataset(
         modis_feats = list(range(1,37))
 
     ## output like ((modis, geometry, psf), ceres)
-    modis_shape = (grid_size, grid_size, len(modis_feats)) ## (B,N,N,Fm)
-    geom_shape = (grid_size, grid_size, len(ceres_feats),) ## (B,N,N,Fg)
-    psf_shape = (grid_size,grid_size,1)                    ## (B,N,N,1))
-    ceres_shape = (len(ceres_labels),)                     ## (B,Fc)
+    ## (B,N,N,Fm) MODIS observation
+    modis_shape = (modis_grid_size, modis_grid_size, len(modis_feats))
+    ## (B,N,N,Fg) geometry from CERES
+    geom_shape = (modis_grid_size, modis_grid_size, len(ceres_feats),)
+    ## (B,N,N,1)) point spread function
+    psf_shape = (modis_grid_size,modis_grid_size,1)
+    ## (B,Fc) CERES observation
+    ceres_shape = (len(ceres_labels),)
     out_sig = ((
         tf.TensorSpec(shape=modis_shape, dtype=tf.float64),
         tf.TensorSpec(shape=geom_shape, dtype=tf.float64),
@@ -215,7 +224,7 @@ def swaths_dataset(
         1. Open the swath file and initialize FeatureGrid objects of the data
         2. Randomly select up to samples_per_swath CERES footprints
         3. Determine the lat/lon of the closest pixel to the CERES centroid,
-           then extract a grid_size square around it. Drop any samples
+           then extract a modis_grid_size square around it. Drop any samples
            where the MODIS grid extends out of bounds.
         4. Extract MODIS radiances, CERES fluxes, and CERES geometry associated
            with each square sub-domain in the sample selection.
@@ -255,11 +264,11 @@ def swaths_dataset(
 
         """ MODIS tile boundary identification """
 
-        ## Extract a grid_size square around each centroid
+        ## Extract a modis_grid_size square around each centroid
         ## and make sure the indeces are in bounds.
         lb_latlon = np.transpose(
-                np.array(cen_latlon).astype(int) - int(grid_size/2))
-        ub_latlon = lb_latlon + grid_size
+                np.array(cen_latlon).astype(int) - int(modis_grid_size/2))
+        ub_latlon = lb_latlon + modis_grid_size
         oob = np.any(np.logical_or(
             lb_latlon<0, ub_latlon>np.array(mlatlon.shape[:2])
             ), axis=-1)
@@ -325,11 +334,29 @@ def swaths_dataset(
             coff,cgain = map(np.asarray, ceres_labels_norm)
             C = (C-coff)/cgain
 
+        ## check for NaNs
         if not mask_val is None:
-            nans = np.logical_not(np.isfinite(M))
-            if debug and np.any(nans):
-                print(f"Replacing {np.count_nonzero(nans)} NaN values")
-            M[nans] = mask_val
+            nans = None
+            if np.any(nans:=np.logical_not(np.isfinite(M))):
+                if debug:
+                    print(f"Replacing {np.count_nonzero(nans)} MODIS "
+                          f"non-finite values found in {swath_path}")
+                M[nans] = mask_val
+            if np.any(nans:=np.logical_not(np.isfinite(C))):
+                if debug:
+                    print(f"Replacing {np.count_nonzero(nans)} CERES "
+                          f"non-finite values found in {swath_path}")
+                C[nans] = mask_val
+            if np.any(nans:=np.logical_not(np.isfinite(G))):
+                if debug:
+                    print(f"Replacing {np.count_nonzero(nans)} Geometry "
+                          f"non-finite values found in {swath_path}")
+                G[nans] = mask_val
+            if np.any(nans:=np.logical_not(np.isfinite(P))):
+                if debug:
+                    print(f"Replacing {np.count_nonzero(nans)} PSF "
+                          f"non-finite values found in {swath_path}")
+                P[nans] = mask_val
 
         """ yield results """
         for i in range(lb_latlon.shape[0]):
@@ -365,11 +392,11 @@ def swaths_dataset(
 
 def get_tiles_h5(
         tile_h5_path:Path, swath_h5s, modis_feats, ceres_feats, ceres_labels,
-        grid_size, samples_per_swath=1000000, block_size=1000000,
+        modis_grid_size, samples_per_swath=1000000, block_size=1000000,
         modis_feats_norm:tuple=None, ceres_feats_norm:tuple=None,
         ceres_labels_norm:tuple=None, num_swath_procs=1, mask_val=None,
         deterministic=False, batch_chunk_size=256, max_tile_count=None,
-        buf_size_mb=128, seed=None):
+        buf_size_mb=128, debug=False, seed=None):
     """
     """
     tile_h5_path = Path(tile_h5_path)
@@ -377,24 +404,26 @@ def get_tiles_h5(
         print(f"Warning: {tile_h5_path.as_posix()} exits!")
         return tile_h5_path
     with h5py.File(tile_h5_path, "w") as f:
-        chunk_shape = (batch_chunk_size, grid_size, grid_size)
+        chunk_shape = (batch_chunk_size, modis_grid_size, modis_grid_size)
         DP = f.create_dataset(
                 name="/data/psf",
-                shape=(0, grid_size, grid_size, 1),
-                maxshape=(None, grid_size, grid_size, 1),
+                shape=(0, modis_grid_size, modis_grid_size, 1),
+                maxshape=(None, modis_grid_size, modis_grid_size, 1),
                 chunks=(*chunk_shape, 1)
                 )
         DG = f.create_dataset(
                 name="/data/geom",
-                shape=(0,grid_size,grid_size,len(ceres_feats)),
-                maxshape=(None,grid_size,grid_size,len(ceres_feats)),
+                shape=(0,modis_grid_size,modis_grid_size,len(ceres_feats)),
+                maxshape=(None,modis_grid_size,
+                          modis_grid_size,len(ceres_feats)),
                 chunks=(*chunk_shape, len(ceres_feats)),
                 compression="gzip",
                 )
         DM = f.create_dataset(
                 name="/data/modis",
-                shape=(0, grid_size, grid_size, len(modis_feats)),
-                maxshape=(None, grid_size, grid_size, len(modis_feats)),
+                shape=(0, modis_grid_size, modis_grid_size, len(modis_feats)),
+                maxshape=(None, modis_grid_size,
+                          modis_grid_size, len(modis_feats)),
                 chunks=(*chunk_shape, len(modis_feats)),
                 compression="gzip",
                 )
@@ -409,7 +438,7 @@ def get_tiles_h5(
                 "modis_feats":modis_feats,
                 "ceres_feats":ceres_feats,
                 "ceres_labels":ceres_labels,
-                "grid_size":grid_size,
+                "modis_grid_size":modis_grid_size,
                 "num_swath_procs":num_swath_procs,
                 "samples_per_swath":samples_per_swath,
                 "block_size":block_size,
@@ -424,7 +453,7 @@ def get_tiles_h5(
         f["data"].attrs.update({
             "swath_dataset_params":json.dumps(swath_dataset_params)
             })
-        dataset = swaths_dataset(**swath_dataset_params)
+        dataset = swaths_dataset(debug=debug, **swath_dataset_params)
         h5idx = 0
         for (m,g,p),c in dataset.batch(batch_chunk_size):
             s = slice(h5idx, h5idx+m.shape[0])
@@ -443,7 +472,8 @@ def get_tiles_h5(
 
 def tiles_dataset(
         tiles_h5s:list, modis_feats, ceres_feats, ceres_labels,
-        buf_size_mb=128., num_tiles_procs=1, block_size=1, deterministic=True):
+        buf_size_mb=128., num_tiles_procs=1, block_size=1, deterministic=True,
+        **kwargs):
     """
     Returns a tensorflow dataset that interleaves data from one or more
     tiles files that were previously created by get_tiles_h5
@@ -460,6 +490,7 @@ def tiles_dataset(
     ## Load the attribute dictionaries containing each tiles h5's parameters
     ## which were used to call swath_dataset for the tiles h5 creation.
     tiles_attrs = {}
+    tiles_h5s = list(map(Path, tiles_h5s))
     for p in tiles_h5s:
         f = h5py.File(p, mode="r")
         tmp_attrs = json.loads(f["data"].attrs["swath_dataset_params"])
@@ -468,7 +499,8 @@ def tiles_dataset(
     sample_attrs = list(tiles_attrs.values())[0]
 
     ## infer the output shapes from the first tiles attrs dict.
-    grid_shape = (sample_attrs["grid_size"], sample_attrs["grid_size"])
+    grid_shape = (sample_attrs["modis_grid_size"],
+                  sample_attrs["modis_grid_size"])
     out_sig = ((
         tf.TensorSpec(shape=(*grid_shape, len(modis_feats)), dtype=tf.float64),
         tf.TensorSpec(shape=(*grid_shape, len(ceres_feats)), dtype=tf.float64),
@@ -550,12 +582,18 @@ def get_modis_mosaic(m):
 if __name__=="__main__":
     """
     The code below consists of a few basic implementations of each method in
-    this module which are mainly for debugging and sanity checks.
+    this module which are mainly for generating tiles hdf5 files, and for
+    debugging / sanity checks.
     """
-    debug = False
+    debug = True
     data_dir = Path("data")
     fig_dir = Path("figures")
-    modis_swath_dir = data_dir.joinpath("swaths")
+
+    swath_dir = data_dir.joinpath("swaths")
+    #swath_dir = data_dir.joinpath("swaths_val")
+
+    tiles_dir = data_dir.joinpath("tiles")
+    #tiles_dir = data_dir.joinpath("tiles_val")
 
     """
     Unless you're generating images, you can probably comment these imports.
@@ -565,22 +603,23 @@ if __name__=="__main__":
     from krttdkit.visualize import guitools as gt
     from krttdkit.visualize import geoplot as gp
 
-
-    """ Generate a new tiles hdf5 file from swath hdf5s """
+    """ don't comment these imports """
     from norm_coeffs import modis_norm,ceres_norm,geom_norm
     (mlabels,mnorm),(clabels,cnorm),(glabels,gnorm) = map(
             lambda t:zip(*t), (modis_norm, ceres_norm, geom_norm))
+
     '''
-    tiles_h5_path = data_dir.joinpath(f"tiles_aqua_test-train.h5")
+    """ Generate a new tiles hdf5 file from swath hdf5s """
+    tiles_h5_path = tiles_dir.joinpath(f"tiles_terra_test_train.h5")
     get_tiles_h5(
             tile_h5_path=tiles_h5_path,
             swath_h5s=[
-                p for p in modis_swath_dir.iterdir() if "aqua" in p.name
+                p for p in swath_dir.iterdir() if "terra" in p.name
                 ],
             modis_feats=mlabels,
             ceres_feats=glabels,
             ceres_labels=clabels,
-            grid_size=48,
+            modis_grid_size=48,
             samples_per_swath=256,
             block_size=8, ## deplete the swath per block
             modis_feats_norm=tuple(map(np.array, zip(*mnorm))),
@@ -593,6 +632,7 @@ if __name__=="__main__":
             max_tile_count=None,
             buf_size_mb=128,
             seed=None,
+            debug=debug,
             )
     exit(0)
     '''
@@ -616,6 +656,8 @@ if __name__=="__main__":
             block_size=4,
             deterministic=False,
             )
+
+    '''
     """ Use the tiles dataset to make a RGB mosaic of MODIS values"""
     mosaic_path = fig_dir.joinpath("modis/mosaics")
     mosaic_count = 0
@@ -630,32 +672,28 @@ if __name__=="__main__":
             #gt.quick_render(gt.scal_to_rgb(mosaics[i]))
             mosaic_count += 1
             if mosaic_count > mosaic_limit:
+                #exit(0)
                 break
-                exit(0)
-            #'''
             gp.generate_raw_image(
                     rgb_norm(gt.scal_to_rgb(mosaics[i])),
                     mosaic_path.joinpath(f"mosaic_aqua_{mosaic_count:02}.png")
                     )
-            #'''
-        #m = gaussnorm(m)
-        #for i,l in enumerate(mlabels):
-        #    print(l, enh.array_stat(m[0,...,i]))
     exit(0)
+    '''
 
-    #'''
+    '''
     """ Generate data in real time from swath hdf5s  """
     g = swaths_dataset(
-            swath_h5s=[s for s in modis_swath_dir.iterdir()],
+            swath_h5s=[s for s in swath_dir.iterdir()],
             buf_size_mb=512,
-            grid_size=48,
+            modis_grid_size=48,
             num_swath_procs=3,
             samples_per_swath=16,
             block_size=2,
-            #modis_feats=(8,1,4,3,2,18,5,26,7,20,27,28,30,31,33),
             modis_feats=None,
             ceres_labels=("swflux","lwflux"),
             ceres_feats=("sza", "vza"),
+            **kwargs
             )
 
     bidx = 0
@@ -677,4 +715,4 @@ if __name__=="__main__":
                         f"modis_tile/{bidx:02}-{j:03}_{cstr}.png"),
                     )
         bidx += 1
-    #'''
+    '''
