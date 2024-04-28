@@ -134,7 +134,7 @@ CERES data that have already been processed by `get_ceres_swath.py`.
 ## PAED model architecture
 
 <p align="center">
-      <img src="https://github.com/Mitchell-D/aes690final/blob/main/figures/data/models/ceda-0/ceda-0.png?raw=true" />
+      <img src="https://github.com/Mitchell-D/aes690final/blob/main/data/models/ceda-0/ceda-0.png?raw=true" />
 </p>
 <p align="center">
       ceda model architecture. Stands for either convolutional
