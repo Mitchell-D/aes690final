@@ -131,6 +131,24 @@ CERES data that have already been processed by `get_ceres_swath.py`.
       of increasing wavelength. Dead and noisy bands are a problem.
 </p>
 
+## band samples
+
+<p align="center">
+      <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/mosaics/mosaic_aqua_20.png?raw=true" />
+      <img height="256" src="https://github.com/Mitchell-D/aes690final/blob/main/figures/modis/mosaics/mosaic_terra_52.png?raw=true" />
+</p>
+<p align="center">
+      Mosaics, of MODIS Aqua and Terra bands, respectively, in order
+      of increasing wavelength. Dead and noisy bands are a problem.
+</p>
+
+<p align="center">
+      <img src="https://github.com/Mitchell-D/aes690final/blob/main/figures/docs/paed-sample?raw=true" />
+</p>
+<p align="center">
+      Sample "pixel-wise aggregate encoder-decoder" (PAED) architecture
+</p>
+
 [1]:https://ceres-tool.larc.nasa.gov/ord-tool
 [2]:https://github.com/Mitchell-D/krttdkit
 [3]:https://ladsweb.modaps.eosdis.nasa.gov/archive/allData/61/MOD021KM/

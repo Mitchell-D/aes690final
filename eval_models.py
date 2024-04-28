@@ -51,12 +51,13 @@ if __name__=="__main__":
     rng = np.random.default_rng(seed=seed)
 
     """ Load the model """
-    md = ModelDir(Path("data/models/test-13/"))
+    md = ModelDir(Path("data/models/test-14/"))
     #model = md.load_weights("test-10_002_2.061.weights.h5")
     #model = md.load_weights("test-11_010_2.274.weights.h5")
     #model = md.load_weights("test-12_008_2.046.weights.h5") ## looks good
     #model = md.load_weights("test-12_final.weights.h5")
-    model = md.load_weights("test-13_043_6.213.weights.h5")
+    #model = md.load_weights("test-13_043_6.213.weights.h5")
+    model = md.load_weights("test-14_001_3.526.weights.h5")
     ppt(md.config)
 
     """ """
