@@ -31,6 +31,11 @@ def gaussnorm(X, contrast=None, gamma=1):
         X = X**(1/gamma)
     return X
 
+def rgb_norm(X):
+    return np.floor(
+            np.clip((X-np.amin(X))/np.ptp(X),0,.9999)*256
+            ).astype(np.uint8)
+
 if __name__=="__main__":
     swath_dir = Path("data/swaths_val")
     fig_dir = Path("figures/swaths")
@@ -114,9 +119,11 @@ if __name__=="__main__":
         ## Select image contrast and gamma parameters
         contrast = 7 ## clip values further than this many standard deviations
         gamma_dcp,gamma_tc,gamma_dust = 2,3,.4
+        '''
         rgb_norm = lambda X:np.floor(
                 np.clip((X-np.amin(X))/np.ptp(X),0,.9999)*256
                 ).astype(np.uint8)
+        '''
         rgb_dcp = rgb_norm(np.dstack(list(map(
             lambda X:gaussnorm(X, contrast=contrast, gamma=gamma_dcp),
             [modis.data(26)**1/.66,modis.data(1),modis.data(6)]

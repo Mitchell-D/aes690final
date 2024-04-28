@@ -1,0 +1,106 @@
+{
+    "model_name": "test-10",
+    "model_type": "paed",
+    "seed": 200007221752,
+    "num_latent_feats": 9,
+    "kernel_size": 1,
+    "square_regularization_coeff": 0.2,
+    "share_decoder_weights": true,
+    "modis_feats": [
+        8,
+        1,
+        4,
+        3,
+        2,
+        18,
+        26,
+        7,
+        20,
+        28,
+        30,
+        31,
+        33
+    ],
+    "ceres_feats": [
+        "sza",
+        "vza"
+    ],
+    "ceres_labels": [
+        "swflux",
+        "lwflux"
+    ],
+    "enc_conv_filters": [
+        256,
+        256,
+        128,
+        128,
+        64,
+        64,
+        64,
+        64
+    ],
+    "enc_activation": "relu",
+    "enc_use_bias": true,
+    "enc_kwargs": {},
+    "enc_out_kwargs": {},
+    "enc_dropout": 0.1,
+    "enc_batchnorm": true,
+    "dec_conv_filters": [
+        64,
+        32,
+        8
+    ],
+    "dec_activation": "relu",
+    "dec_use_bias": true,
+    "dec_kwargs": {},
+    "dec_out_kwargs": {},
+    "dec_dropout": 0.0,
+    "dec_batchnorm": true,
+    "learning_rate": 0.0001,
+    "loss": "mse",
+    "metrics": [
+        "mse",
+        "mae"
+    ],
+    "weighted_metrics": [
+        "mse",
+        "mae"
+    ],
+    "early_stop_metric": "val_mse",
+    "early_stop_patience": 64,
+    "save_weights_only": true,
+    "batch_size": 64,
+    "batch_buffer": 1,
+    "max_epochs": 256,
+    "val_frequency": 1,
+    "mask_val": 9999.0,
+    "modis_grid_size": 48,
+    "num_swath_procs": 6,
+    "samples_per_swath": 192,
+    "block_size": 8,
+    "buf_size_mb": 512,
+    "train_regions": [
+        "neus"
+    ],
+    "train_sats": [
+        "aqua"
+    ],
+    "val_regions": [
+        "neus"
+    ],
+    "val_sats": [
+        "aqua"
+    ],
+    "notes": "slower learning rate, bigger encoder, smaller latent, some dropout",
+    "num_modis_feats": 13,
+    "num_ceres_feats": 2,
+    "num_ceres_labels": 2,
+    "tiles_h5s_train": [
+        "data/tiles/tiles_terra_test_train.h5",
+        "data/tiles/tiles_aqua_test_train.h5"
+    ],
+    "tiles_h5s_val": [
+        "data/tiles_val/tiles_terra_test_val.h5",
+        "data/tiles_val/tiles_aqua_test_val.h5"
+    ]
+}

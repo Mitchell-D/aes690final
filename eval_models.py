@@ -23,6 +23,7 @@ from norm_coeffs import modis_norm,ceres_norm,geom_norm
 modis_norm,geom_norm,ceres_norm = map(dict,(modis_norm,geom_norm,ceres_norm))
 from FeatureGridV2 import FeatureGridV2
 from FG1D import FG1D
+from plot_swath import gaussnorm,rgb_norm
 
 from krttdkit.visualize import guitools as gt
 
@@ -43,14 +44,19 @@ def load_swath(swath_path:Path):
     return ceres,modis
 
 if __name__=="__main__":
-    swath_dir = Path("data/swaths")
+    #swath_dir = Path("data/swaths")
+    swath_dir = Path("data/swaths_val")
     #seed = 200007221752
     seed = None
     rng = np.random.default_rng(seed=seed)
 
     """ Load the model """
-    md = ModelDir(Path("data/models/test-9/"))
-    model = md.load_weights("test-9_012_2.096.weights.h5")
+    md = ModelDir(Path("data/models/test-13/"))
+    #model = md.load_weights("test-10_002_2.061.weights.h5")
+    #model = md.load_weights("test-11_010_2.274.weights.h5")
+    #model = md.load_weights("test-12_008_2.046.weights.h5") ## looks good
+    #model = md.load_weights("test-12_final.weights.h5")
+    model = md.load_weights("test-13_043_6.213.weights.h5")
     ppt(md.config)
 
     """ """
@@ -60,7 +66,7 @@ if __name__=="__main__":
     ## load a single swath
     for sp in swath_paths:
         ceres,modis = load_swath(sp)
-        m = modis.data(md.config["modis_feats"])[np.newaxis,:256,:256,...]
+        m = modis.data(md.config["modis_feats"])[np.newaxis,:512,:512,...]
         c = ceres.data(md.config["ceres_labels"])
         ## use average geometry conditions for rough estimate since MODIS
         ## geometryscale is currently messed up.
@@ -74,24 +80,18 @@ if __name__=="__main__":
         cmean,cstd = zip(*[ceres_norm[k] for k in md.config["ceres_labels"]])
 
         m = (m-mmean)/mstd
-        #g = (g-gmean)/gstd
-
-        print(m.shape, g.shape, c.shape, p.shape)
-        print(np.average(m), np.amin(m), np.amax(m))
-        print(np.average(g), np.amin(g), np.amax(g))
-        print(np.average(p), np.amax(p), np.sum(p))
 
         ## Create a new model for the
         #paed = tf.keras.Model(model.input, model.get_layer("dec_out").output)
         paed = tf.keras.Model(
                 model.input,
                 model.get_layer("square_reg_layer").output
+                #model.get_layer("dec_out_dec-agg").output
                 )
 
-        print(cstd, cmean)
         disagg = paed((m,g,p)) * np.array(cstd) + np.array(cmean)
 
-        print(disagg.shape)
+        print(sp)
         print(np.amin(disagg[...,0]),
               np.average(disagg[...,0]),
               np.amax(disagg[...,0]))
@@ -99,6 +99,10 @@ if __name__=="__main__":
               np.average(disagg[...,1]),
               np.amax(disagg[...,1]))
 
+        tc_idxs = tuple(md.config["modis_feats"].index(l) for l in (1,4,3))
+        tc_rgb = rgb_norm(gaussnorm(m[...,tc_idxs], contrast=5, gamma=2))
+
+        gt.quick_render(np.squeeze(tc_rgb))
         gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,0]))
         gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,1]))
 

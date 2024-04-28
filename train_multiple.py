@@ -28,13 +28,13 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"test-9",
+        "model_name":"test-14",
         "model_type":"paed",
         "seed":200007221752,
 
-        "num_latent_feats":32,
-        "kernel_size":1,
-        "square_regularization_coeff":.2,
+        "num_latent_feats":18,
+        "kernel_size":2,
+        "square_regularization_coeff":2,
         "share_decoder_weights":True,
 
         ## bands 21-25 and 27 have nan values;
@@ -43,16 +43,16 @@ config = {
         "ceres_feats":("sza","vza"),
         "ceres_labels":("swflux", "lwflux"),
 
-        "enc_conv_filters":[128,128,64,64,64],
-        "enc_activation":"relu",
+        "enc_conv_filters":[128,128,64,64,64,64],
+        "enc_activation":"gelu",
         "enc_use_bias":True,
         "enc_kwargs":{},
         "enc_out_kwargs":{},
-        "enc_dropout":0.,
+        "enc_dropout":0.1,
         "enc_batchnorm":True,
 
-        "dec_conv_filters":[64,32,8],
-        "dec_activation":"relu",
+        "dec_conv_filters":[64,64,32,8],
+        "dec_activation":"gelu",
         "dec_use_bias":True,
         "dec_kwargs":{},
         "dec_out_kwargs":{},
@@ -60,7 +60,7 @@ config = {
         "dec_batchnorm":True,
 
         ## Exclusive to compile_and_build_dir
-        "learning_rate":1e-2,
+        "learning_rate":1e-5,
         "loss":"mse",
         "metrics":["mse", "mae"],
         "weighted_metrics":["mse", "mae"],
@@ -69,18 +69,18 @@ config = {
         "early_stop_metric":"val_mse", ## metric evaluated for stagnation
         "early_stop_patience":64, ## number of epochs before stopping
         "save_weights_only":True,
-        "batch_size":256,
-        "batch_buffer":3,
-        "max_epochs":2048, ## maximum number of epochs to train
+        "batch_size":64,
+        "batch_buffer":2,
+        "max_epochs":256, ## maximum number of epochs to train
         "val_frequency":1, ## epochs between validation
 
         ## Exclusive to generator init
         #"train_val_ratio":.9,
         "mask_val":9999.,
         "modis_grid_size":48,
-        "num_swath_procs":8,
-        "samples_per_swath":128,
-        "block_size":16,
+        "num_swath_procs":6,
+        "samples_per_swath":256,
+        "block_size":8,
         "buf_size_mb":512,
         ## Substrings constraining swath hdf5s used for traning and validation
         "train_regions":("neus",),
@@ -88,7 +88,7 @@ config = {
         "val_regions":("neus",),
         "val_sats":("aqua",),
 
-        "notes":"Trying to tune regularization",
+        "notes":"smaller decoder, more latent feats, kernel size 2, moderate learning rate, strong output regularization",
         }
 ## Count each of the input types for the generators' init function
 config["num_modis_feats"] = len(config["modis_feats"])
