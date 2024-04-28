@@ -28,39 +28,46 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"test-14",
+        "model_name":"test-15",
         "model_type":"paed",
         "seed":200007221752,
 
-        "num_latent_feats":18,
-        "kernel_size":2,
-        "square_regularization_coeff":2,
+        "num_latent_feats":32,
+        "kernel_size":1,
+        ## ie: Loss += square_regularization_coeff * outputs ** 2
+        "square_regularization_coeff":.6,
+        ## If True, the same decoder is applied to both the aggregate
+        ## and the gridded latent vectors, otherwise a separate decoder
+        ## (or 2) is used to make a prediction for each output
         "share_decoder_weights":True,
+        ## Each CERES output will have its own decoder(s)
+        "separate_output_decoders":True,
 
         ## bands 21-25 and 27 have nan values;
         ## striping and noise issues still present with others.
         "modis_feats":(8,1,4,3,2,18,26,7,20,28,30,31,33),
-        "ceres_feats":("sza","vza"),
+        "ceres_feats":("sza",),
         "ceres_labels":("swflux", "lwflux"),
 
-        "enc_conv_filters":[128,128,64,64,64,64],
-        "enc_activation":"gelu",
+        "enc_conv_filters":[256,256,128,64,64,64],
+        "enc_activation":"sigmoid",
         "enc_use_bias":True,
         "enc_kwargs":{},
         "enc_out_kwargs":{},
         "enc_dropout":0.1,
-        "enc_batchnorm":True,
+        "enc_batchnorm":False,
 
-        "dec_conv_filters":[64,64,32,8],
-        "dec_activation":"gelu",
-        "dec_use_bias":True,
+        "dec_conv_filters":[32],
+        "dec_activation":"relu",
+        "dec_use_bias":False,
         "dec_kwargs":{},
         "dec_out_kwargs":{},
         "dec_dropout":0.,
         "dec_batchnorm":True,
+        "dec_out_kwargs":{"use_bias":False},
 
         ## Exclusive to compile_and_build_dir
-        "learning_rate":1e-5,
+        "learning_rate":1e-4,
         "loss":"mse",
         "metrics":["mse", "mae"],
         "weighted_metrics":["mse", "mae"],
@@ -69,7 +76,7 @@ config = {
         "early_stop_metric":"val_mse", ## metric evaluated for stagnation
         "early_stop_patience":64, ## number of epochs before stopping
         "save_weights_only":True,
-        "batch_size":64,
+        "batch_size":128,
         "batch_buffer":2,
         "max_epochs":256, ## maximum number of epochs to train
         "val_frequency":1, ## epochs between validation
@@ -88,7 +95,7 @@ config = {
         "val_regions":("neus",),
         "val_sats":("aqua",),
 
-        "notes":"smaller decoder, more latent feats, kernel size 2, moderate learning rate, strong output regularization",
+        "notes":"pixel-wise ; wider encoder ; separate single-hidden-layer decoders for each output ; matrix multiplication output ; only sza geometry ; no batchnorm for encoder ;  smaller regularization",
         }
 ## Count each of the input types for the generators' init function
 config["num_modis_feats"] = len(config["modis_feats"])

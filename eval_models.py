@@ -45,19 +45,19 @@ def load_swath(swath_path:Path):
 
 if __name__=="__main__":
     #swath_dir = Path("data/swaths")
-    swath_dir = Path("data/swaths_val")
+    swath_dir = Path("data/swaths")
     #seed = 200007221752
     seed = None
     rng = np.random.default_rng(seed=seed)
 
     """ Load the model """
-    md = ModelDir(Path("data/models/test-14/"))
+    md = ModelDir(Path("data/models/test-15/"))
     #model = md.load_weights("test-10_002_2.061.weights.h5")
     #model = md.load_weights("test-11_010_2.274.weights.h5")
     #model = md.load_weights("test-12_008_2.046.weights.h5") ## looks good
     #model = md.load_weights("test-12_final.weights.h5")
     #model = md.load_weights("test-13_043_6.213.weights.h5")
-    model = md.load_weights("test-14_001_3.526.weights.h5")
+    model = md.load_weights("test-15_final.weights.h5")
     ppt(md.config)
 
     """ """
@@ -67,14 +67,17 @@ if __name__=="__main__":
     ## load a single swath
     for sp in swath_paths:
         ceres,modis = load_swath(sp)
-        m = modis.data(md.config["modis_feats"])[np.newaxis,:512,:512,...]
+        m = modis.data(md.config["modis_feats"])[np.newaxis,384:512,384:512,...]
         c = ceres.data(md.config["ceres_labels"])
         ## use average geometry conditions for rough estimate since MODIS
         ## geometryscale is currently messed up.
-        g = np.zeros((*m.shape[:-1],2))
-        g[...,1] += 1
+        #g = np.zeros((*m.shape[:-1],2))
+        g = np.zeros((*m.shape[:-1],len(md.config["ceres_feats"])))
+
+        #g[...,1] += 1
         ## Fully express every pixel
-        p = np.full((*m.shape[:-1],1),1)
+        p = np.full((*m.shape[:-1],1), 1, dtype=float)
+        p /= float(p.shape[1]*p.shape[2])
 
         mmean,mstd = zip(*[modis_norm[k] for k in md.config["modis_feats"]])
         gmean,gstd = zip(*[geom_norm[k] for k in md.config["ceres_feats"]])
@@ -82,14 +85,20 @@ if __name__=="__main__":
 
         m = (m-mmean)/mstd
 
+        ## convolutional encoder disaggregator
+        ## or convolutional-encoder-decoder-aggregator
+        model_path = md.dir.joinpath("ceda.keras")
+        model.save(model_path)
+
         ## Create a new model for the
         #paed = tf.keras.Model(model.input, model.get_layer("dec_out").output)
         paed = tf.keras.Model(
                 model.input,
-                model.get_layer("square_reg_layer").output
+                model.get_layer("square_reg").output
                 #model.get_layer("dec_out_dec-agg").output
                 )
 
+        agg = model((m,g,p)) * np.array(cstd) + np.array(cmean)
         disagg = paed((m,g,p)) * np.array(cstd) + np.array(cmean)
 
         print(sp)
@@ -99,6 +108,7 @@ if __name__=="__main__":
         print(np.amin(disagg[...,1]),
               np.average(disagg[...,1]),
               np.amax(disagg[...,1]))
+        print(agg)
 
         tc_idxs = tuple(md.config["modis_feats"].index(l) for l in (1,4,3))
         tc_rgb = rgb_norm(gaussnorm(m[...,tc_idxs], contrast=5, gamma=2))
