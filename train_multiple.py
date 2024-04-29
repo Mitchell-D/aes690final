@@ -28,14 +28,14 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"ceda-0",
+        "model_name":"ceda-3",
         "model_type":"ceda",
         "seed":200007221752,
 
-        "num_latent_feats":32,
+        "num_latent_feats":64,
         "kernel_size":1,
         ## ie: Loss += square_regularization_coeff * outputs ** 2
-        "square_regularization_coeff":.6,
+        "square_regularization_coeff":.3,
         ## If True, the same decoder is applied to both the aggregate
         ## and the gridded latent vectors, otherwise a separate decoder
         ## (or 2) is used to make a prediction for each output
@@ -45,11 +45,11 @@ config = {
 
         ## bands 21-25 and 27 have nan values;
         ## striping and noise issues still present with others.
-        "modis_feats":(8,1,4,3,2,18,26,7,20,28,30,31,33),
-        "ceres_feats":("sza",),
+        "modis_feats":(1,4,3,2,26,7,20,28,30,31,33),
+        "ceres_feats":("sza","vza"),
         "ceres_labels":("swflux", "lwflux"),
 
-        "enc_conv_filters":[256,256,128,64,64,64],
+        "enc_conv_filters":[512,512,256,256,128,64,64,64],
         "enc_activation":"sigmoid",
         "enc_use_bias":True,
         "enc_kwargs":{},
@@ -57,9 +57,9 @@ config = {
         "enc_dropout":0.1,
         "enc_batchnorm":False,
 
-        "dec_conv_filters":[32],
+        "dec_conv_filters":[32,32],
         "dec_activation":"relu",
-        "dec_use_bias":False,
+        "dec_use_bias":True,
         "dec_kwargs":{},
         "dec_out_kwargs":{},
         "dec_dropout":0.,
@@ -67,7 +67,7 @@ config = {
         "dec_out_kwargs":{"use_bias":False},
 
         ## Exclusive to compile_and_build_dir
-        "learning_rate":1e-4,
+        "learning_rate":1e-3,
         "loss":"mse",
         "metrics":["mse", "mae"],
         "weighted_metrics":["mse", "mae"],
@@ -76,26 +76,28 @@ config = {
         "early_stop_metric":"val_mse", ## metric evaluated for stagnation
         "early_stop_patience":64, ## number of epochs before stopping
         "save_weights_only":True,
-        "batch_size":128,
+        "batch_size":256,
         "batch_buffer":2,
         "max_epochs":256, ## maximum number of epochs to train
-        "val_frequency":1, ## epochs between validation
+        "val_frequency":1, ## epochs between validations
+        "steps_per_epoch":128, ## batches to draw per epoch
+        "validation_steps":64, ## batches to draw per validation
 
         ## Exclusive to generator init
         #"train_val_ratio":.9,
         "mask_val":9999.,
         "modis_grid_size":48,
-        "num_swath_procs":6,
+        "num_swath_procs":11,
         "samples_per_swath":256,
         "block_size":8,
         "buf_size_mb":512,
         ## Substrings constraining swath hdf5s used for traning and validation
-        "train_regions":("neus",),
-        "train_sats":("aqua",),
-        "val_regions":("neus",),
-        "val_sats":("aqua",),
+        "train_regions":("alk", "azn", "hkh", "idn", "neus", "seus"),
+        "train_sats":("aqua", "terra"),
+        "val_regions":("alk", "azn", "hkh", "idn", "neus", "seus"),
+        "val_sats":("aqua", "terra"),
 
-        "notes":"pixel-wise ; wider encoder ; separate single-hidden-layer decoders for each output ; matrix multiplication output ; only sza geometry ; no batchnorm for encoder ;  smaller regularization",
+        "notes":"Faster learning rate, bigger batch size, huge encoder, only GOES adjacent bands",
         }
 ## Count each of the input types for the generators' init function
 config["num_modis_feats"] = len(config["modis_feats"])
@@ -160,14 +162,26 @@ Provide the training and validation inputs with a collection of tiles hdf5s
 by calling generate_samples.tiles_dataset to get a tensorflow dataset.
 The tiles hdf5s must have been created by generate_samples.get_tiles_h5
 """
-train_tiles_dir = Path("data/tiles")
+train_substrings = (*config["train_regions"], *config["train_sats"])
+val_substrings = (*config["val_regions"], *config["val_sats"])
+train_tiles_dir = Path("data/tiles_train")
 val_tiles_dir = Path("data/tiles_val")
-config["tiles_h5s_train"] = list(map(
-    lambda p:train_tiles_dir.joinpath(p).as_posix(),
-    ("tiles_terra_test_train.h5", "tiles_aqua_test_train.h5")))
-config["tiles_h5s_val"] = list(map(
-    lambda p:val_tiles_dir.joinpath(p).as_posix(),
-    ("tiles_terra_test_val.h5", "tiles_aqua_test_val.h5")))
+
+config["tiles_h5s_train"] = list(map(str,filter(
+    lambda tiles_path:any(s in tiles_path.name for s in config["train_sats"]) \
+            and any(s in tiles_path.name for s in config["train_regions"]),
+    train_tiles_dir.iterdir(),
+    )))
+config["tiles_h5s_val"] = list(map(str,filter(
+    lambda tiles_path:any(s in tiles_path.name for s in config["val_sats"]) \
+            and any(s in tiles_path.name for s in config["val_regions"]),
+    val_tiles_dir.iterdir(),
+    )))
+
+#config["tiles_h5s_val"] = list(map(
+#    lambda p:val_tiles_dir.joinpath(p).as_posix(),
+#    ("tiles_terra_test_val.h5", "tiles_aqua_test_val.h5")))
+
 tgen = tiles_dataset(tiles_h5s=config["tiles_h5s_train"], **config)
 vgen = tiles_dataset(tiles_h5s=config["tiles_h5s_val"], **config)
 

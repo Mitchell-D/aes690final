@@ -592,30 +592,36 @@ if __name__=="__main__":
     swath_dir = data_dir.joinpath("swaths")
     #swath_dir = data_dir.joinpath("swaths_val")
 
-    tiles_dir = data_dir.joinpath("tiles")
-    #tiles_dir = data_dir.joinpath("tiles_val")
 
     """
     Unless you're generating images, you can probably comment these imports.
     """
-    from plot_swath import gaussnorm
-    from krttdkit.operate import enhance as enh
-    from krttdkit.visualize import guitools as gt
-    from krttdkit.visualize import geoplot as gp
+    #from plot_swath import gaussnorm
+    #from krttdkit.operate import enhance as enh
+    #from krttdkit.visualize import guitools as gt
+    #from krttdkit.visualize import geoplot as gp
 
     """ don't comment these imports """
     from norm_coeffs import modis_norm,ceres_norm,geom_norm
     (mlabels,mnorm),(clabels,cnorm),(glabels,gnorm) = map(
             lambda t:zip(*t), (modis_norm, ceres_norm, geom_norm))
 
-    '''
+
+    #'''
     """ Generate a new tiles hdf5 file from swath hdf5s """
-    tiles_h5_path = tiles_dir.joinpath(f"tiles_terra_test_train.h5")
+    #tiles_dir = data_dir.joinpath("tiles_train")
+    tiles_dir = data_dir.joinpath("tiles_val")
+    swath_substrings = ("aqua","seus")
+    swath_name = "-".join(swath_substrings)+"-val"
+    tiles_h5_path = tiles_dir.joinpath(f"tiles_{swath_name}.h5")
+
+    swath_h5s = list(filter(
+        lambda p:all(s in p.name for s in swath_substrings),
+        swath_dir.iterdir(),
+        ))
     get_tiles_h5(
             tile_h5_path=tiles_h5_path,
-            swath_h5s=[
-                p for p in swath_dir.iterdir() if "terra" in p.name
-                ],
+            swath_h5s=swath_h5s,
             modis_feats=mlabels,
             ceres_feats=glabels,
             ceres_labels=clabels,
@@ -635,7 +641,7 @@ if __name__=="__main__":
             debug=debug,
             )
     exit(0)
-    '''
+    #'''
 
     #'''
     """ Load a tiles dataset from an existing tiles file """
