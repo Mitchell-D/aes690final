@@ -23,8 +23,8 @@
 #SBATCH -p shared --gres=gpu:1
 
 #SBATCH -J ceda_train
-#SBATCH -o /rhome/mdodson/aes690final/slurm/out/slurm_train-ceda-3.out ## STDOUT
-#SBATCH -e /rhome/mdodson/aes690final/slurm/out/slurm_train-ceda-3.err ## STDERR
+#SBATCH -o /rhome/mdodson/aes690final/slurm/out/slurm_train-ceda-5.out ## STDOUT
+#SBATCH -e /rhome/mdodson/aes690final/slurm/out/slurm_train-ceda-5.err ## STDERR
 
 module load cuda
 $CUDA_PATH/samples/bin/x86_64/linux/release/deviceQuery
