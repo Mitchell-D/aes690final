@@ -26,6 +26,7 @@ from FG1D import FG1D
 from plot_swath import gaussnorm,rgb_norm
 
 from krttdkit.visualize import guitools as gt
+from krttdkit.visualize import geoplot as gp
 
 """
 Config contains configuration values default to all models.
@@ -45,19 +46,21 @@ def load_swath(swath_path:Path):
 
 if __name__=="__main__":
     #swath_dir = Path("data/swaths")
-    swath_dir = Path("data/swaths")
+    swath_dir = Path("data/swaths_val")
+    fig_dir = Path("figures/")
     #seed = 200007221752
     seed = None
     rng = np.random.default_rng(seed=seed)
 
     """ Load the model """
     md = ModelDir(Path("data/models/ceda-0/"))
+    #md = ModelDir(Path("data/models/test-14/"))
     #model = md.load_weights("test-10_002_2.061.weights.h5")
     #model = md.load_weights("test-11_010_2.274.weights.h5")
     #model = md.load_weights("test-12_008_2.046.weights.h5") ## looks good
-    #model = md.load_weights("test-12_final.weights.h5")
+    #model = md.load_weights("test-14_final.weights.h5")
     #model = md.load_weights("test-13_043_6.213.weights.h5")
-    model = md.load_weights("ceda-0_003_2.517.weights.h5")
+    model = md.load_weights("ceda-0_036_2.307.weights.h5")
     ppt(md.config)
 
     """ """
@@ -65,7 +68,7 @@ if __name__=="__main__":
     rng.shuffle(swath_paths)
 
     ## load a single swath
-    for sp in swath_paths:
+    for sp in swath_paths[:32]:
         ceres,modis = load_swath(sp)
         m = modis.data(md.config["modis_feats"])[np.newaxis,384:512,384:512,...]
         c = ceres.data(md.config["ceres_labels"])
@@ -90,32 +93,55 @@ if __name__=="__main__":
         #model_path = md.dir.joinpath("ceda.keras")
         #model.save(model_path)
 
-        ## Create a new model for the
-        #paed = tf.keras.Model(model.input, model.get_layer("dec_out").output)
-        paed = tf.keras.Model(
+        caed = tf.keras.Model(
                 model.input,
                 model.get_layer("join_dec-agg").output
-                #model.get_layer("dec_out_dec-agg").output
+                #model.get_layer("square_reg_layer_old").output
                 )
 
         agg = model((m,g,p)) * np.array(cstd) + np.array(cmean)
-        disagg = paed((m,g,p)) * np.array(cstd) + np.array(cmean)
+        disagg = caed((m,g,p)) * np.array(cstd) + np.array(cmean)
 
         print(sp)
-        print(np.amin(disagg[...,0]),
+        print("swflux min/avb/max: {:.4f} {:.4f} {:.4f}".format(
+              np.amin(disagg[...,0]),
               np.average(disagg[...,0]),
-              np.amax(disagg[...,0]))
-        print(np.amin(disagg[...,1]),
+              np.amax(disagg[...,0])))
+        #print(f"lwflux min/avb/max:",
+        print("lwflux min/avb/max: {:.4f} {:.4f} {:.4f}".format(
+              np.amin(disagg[...,1]),
               np.average(disagg[...,1]),
-              np.amax(disagg[...,1]))
-        print(agg)
+              np.amax(disagg[...,1])))
+        print(f"Aggregate prediction: {agg}")
 
         tc_idxs = tuple(md.config["modis_feats"].index(l) for l in (1,4,3))
-        tc_rgb = rgb_norm(gaussnorm(m[...,tc_idxs], contrast=5, gamma=2))
+        tc_rgb = np.squeeze(rgb_norm(gaussnorm(
+            m[...,tc_idxs], contrast=5, gamma=2)))
 
+        swflux_rgb = rgb_norm(gt.scal_to_rgb(np.squeeze(disagg)[...,0]))
+        lwflux_rgb = rgb_norm(gt.scal_to_rgb(np.squeeze(disagg)[...,1]))
+
+        '''
         gt.quick_render(np.squeeze(tc_rgb))
-        gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,0]))
-        gt.quick_render(gt.scal_to_rgb(np.squeeze(disagg)[...,1]))
+        gt.quick_render(swflux_rgb)
+        gt.quick_render(lwflux_rgb)
+        '''
+
+        gp.generate_raw_image(
+                swflux_rgb,
+                fig_dir.joinpath(
+                    f"disagg/{sp.stem}_{md.dir.name}_swflux.png")
+                )
+        gp.generate_raw_image(
+                lwflux_rgb,
+                fig_dir.joinpath(
+                    f"disagg/{sp.stem}_{md.dir.name}_lwflux.png")
+                )
+        gp.generate_raw_image(
+                tc_rgb,
+                fig_dir.joinpath(
+                    f"disagg/{sp.stem}_{md.dir.name}_truecolor.png")
+                )
 
     exit(0)
 
