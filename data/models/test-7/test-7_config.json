@@ -3,7 +3,7 @@
     "model_type": "paed_old2",
     "seed": 200007221752,
     "num_latent_feats": 32,
-    "share_decoder_weights":true,
+    "share_decoder_weights": true,
     "kernel_size": 1,
     "modis_feats": [
         8,
@@ -98,5 +98,57 @@
     "tiles_h5s_val": [
         "data/tiles_val/tiles_terra_test_val.h5",
         "data/tiles_val/tiles_aqua_test_val.h5"
+    ],
+    "modis_feats_norm": [
+        [
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            273.15,
+            273.15,
+            273.15,
+            273.15,
+            273.15
+        ],
+        [
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            0.15,
+            12.0,
+            12.0,
+            12.0,
+            12.0,
+            12.0
+        ]
+    ],
+    "ceres_feats_norm": [
+        [
+            17.5,
+            38.4
+        ],
+        [
+            6.6,
+            1.4
+        ]
+    ],
+    "ceres_labels_norm": [
+        [
+            303.9,
+            237.6
+        ],
+        [
+            107.5,
+            25.9
+        ]
     ]
 }
