@@ -1,0 +1,101 @@
+Model: "model"
+__________________________________________________________________________________________________
+ Layer (type)                Output Shape                 Param #   Connected to                  
+==================================================================================================
+ in_modis (InputLayer)       [(None, None, None, 11)]     0         []                            
+                                                                                                  
+ enc_conv_0 (Conv2D)         (None, None, None, 128)      1536      ['in_modis[0][0]']            
+                                                                                                  
+ enc_conv_1 (Conv2D)         (None, None, None, 128)      16512     ['enc_conv_0[0][0]']          
+                                                                                                  
+ enc_conv_2 (Conv2D)         (None, None, None, 128)      16512     ['enc_conv_1[0][0]']          
+                                                                                                  
+ enc_out (Conv2D)            (None, None, None, 18)       2322      ['enc_conv_2[0][0]']          
+                                                                                                  
+ in_geom (InputLayer)        [(None, None, None, 2)]      0         []                            
+                                                                                                  
+ dec_dec-agg-0 (Functional)  (None, None, None, 1)        2016      ['enc_out[0][0]',             
+                                                                     'in_geom[0][0]',             
+                                                                     'tf.__operators__.getitem[0][
+                                                                    0]',                          
+                                                                     'tf.math.reduce_mean[0][0]'] 
+|¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|
+| dec_in_latent (InputLayer  [(None, None, None, 18)]     0         []                           |
+| )                                                                                              |
+|                                                                                                |
+| dec_in_geom (InputLayer)   [(None, None, None, 2)]      0         []                           |
+|                                                                                                |
+| concat_geom (Concatenate)  (None, None, None, 20)       0         []                           |
+|                                                                                                |
+| dec_conv_0 (Conv2D)        (None, None, None, 32)       672       []                           |
+|                                                                                                |
+| dec_bn_0 (BatchNormalizat  (None, None, None, 32)       128       []                           |
+| ion)                                                                                           |
+|                                                                                                |
+| dec_conv_1 (Conv2D)        (None, None, None, 32)       1056      []                           |
+|                                                                                                |
+| dec_bn_1 (BatchNormalizat  (None, None, None, 32)       128       []                           |
+| ion)                                                                                           |
+|                                                                                                |
+| dec_out_dec-agg-0 (Conv2D  (None, None, None, 1)        32        []                           |
+| )                                                                                              |
+¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+ dec_dec-agg-1 (Functional)  (None, None, None, 1)        2016      ['enc_out[0][0]',             
+                                                                     'in_geom[0][0]',             
+                                                                     'tf.__operators__.getitem[0][
+                                                                    0]',                          
+                                                                     'tf.math.reduce_mean[0][0]'] 
+|¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯|
+| dec_in_latent (InputLayer  [(None, None, None, 18)]     0         []                           |
+| )                                                                                              |
+|                                                                                                |
+| dec_in_geom (InputLayer)   [(None, None, None, 2)]      0         []                           |
+|                                                                                                |
+| concat_geom (Concatenate)  (None, None, None, 20)       0         []                           |
+|                                                                                                |
+| dec_conv_0 (Conv2D)        (None, None, None, 32)       672       []                           |
+|                                                                                                |
+| dec_bn_0 (BatchNormalizat  (None, None, None, 32)       128       []                           |
+| ion)                                                                                           |
+|                                                                                                |
+| dec_conv_1 (Conv2D)        (None, None, None, 32)       1056      []                           |
+|                                                                                                |
+| dec_bn_1 (BatchNormalizat  (None, None, None, 32)       128       []                           |
+| ion)                                                                                           |
+|                                                                                                |
+| dec_out_dec-agg-1 (Conv2D  (None, None, None, 1)        32        []                           |
+| )                                                                                              |
+¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯
+ square_reg (SquareRegLayer  (None, None, None, 1)        0         ['dec_dec-agg-0[0][0]',       
+ )                                                                   'dec_dec-agg-1[0][0]']       
+                                                                                                  
+ join_dec-agg (Concatenate)  (None, None, None, 2)        0         ['square_reg[0][0]',          
+                                                                     'square_reg[1][0]']          
+                                                                                                  
+ in_psf (InputLayer)         [(None, None, None, 1)]      0         []                            
+                                                                                                  
+ psf (Lambda)                multiple                     0         ['join_dec-agg[0][0]',        
+                                                                     'in_psf[0][0]',              
+                                                                     'enc_out[0][0]',             
+                                                                     'in_psf[0][0]']              
+                                                                                                  
+ tf.__operators__.getitem (  (None, 1, 1, 18)             0         ['psf[1][0]']                 
+ SlicingOpLambda)                                                                                 
+                                                                                                  
+ tf.math.reduce_mean (TFOpL  (None, 1, 1, 2)              0         ['in_geom[0][0]']             
+ ambda)                                                                                           
+                                                                                                  
+ join_agg-dec (Concatenate)  (None, 1, 1, 2)              0         ['dec_dec-agg-0[1][0]',       
+                                                                     'dec_dec-agg-1[1][0]']       
+                                                                                                  
+ tf.__operators__.add (TFOp  (None, 1, None, 2)           0         ['psf[0][0]',                 
+ Lambda)                                                             'join_agg-dec[0][0]']        
+                                                                                                  
+ tf.math.truediv (TFOpLambd  (None, 1, None, 2)           0         ['tf.__operators__.add[0][0]']
+ a)                                                                                               
+                                                                                                  
+==================================================================================================
+Total params: 40914 (159.82 KB)
+Trainable params: 40658 (158.82 KB)
+Non-trainable params: 256 (1.00 KB)
+__________________________________________________________________________________________________

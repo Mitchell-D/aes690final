@@ -28,14 +28,14 @@ This config may be added to and some fields may be overwritten downstream.
 
 config = {
         ## Meta-info
-        "model_name":"ceda-5",
+        "model_name":"ceda-7",
         "model_type":"ceda",
-        "seed":202404290756,
+        "seed":None,
 
-        "num_latent_feats":9,
+        "num_latent_feats":18,
         "kernel_size":1,
         ## ie: Loss += square_regularization_coeff * outputs ** 2
-        "square_regularization_coeff":.6,
+        "square_regularization_coeff":.4,
         ## If True, the same decoder is applied to both the aggregate
         ## and the gridded latent vectors, otherwise a separate decoder
         ## (or 2) is used to make a prediction for each output
@@ -49,12 +49,12 @@ config = {
         "ceres_feats":("sza","vza"),
         "ceres_labels":("swflux", "lwflux"),
 
-        "enc_conv_filters":[256,256,256,128,64,64,64],
+        "enc_conv_filters":[128,128,128],
         "enc_activation":"sigmoid",
         "enc_use_bias":True,
         "enc_kwargs":{},
         "enc_out_kwargs":{},
-        "enc_dropout":0.1,
+        "enc_dropout":0.,
         "enc_batchnorm":False,
 
         "dec_conv_filters":[32,32],
@@ -67,7 +67,7 @@ config = {
         "dec_out_kwargs":{"use_bias":False},
 
         ## Exclusive to compile_and_build_dir
-        "learning_rate":1e-4,
+        "learning_rate":1e-5,
         "loss":"mse",
         "metrics":["mse", "mae"],
         "weighted_metrics":["mse", "mae"],
@@ -76,30 +76,34 @@ config = {
         "early_stop_metric":"val_mse", ## metric evaluated for stagnation
         "early_stop_patience":64, ## number of epochs before stopping
         "save_weights_only":True,
-        "batch_size":512,
+        "batch_size":64,
         "batch_buffer":2,
         "max_epochs":256, ## maximum number of epochs to train
         "val_frequency":1, ## epochs between validations
-        "steps_per_epoch":256, ## batches to draw per epoch
-        "validation_steps":128, ## batches to draw per validation
+        "steps_per_epoch":128, ## batches to draw per epoch
+        "validation_steps":64, ## batches to draw per validation
 
         ## Exclusive to generator init
         #"train_val_ratio":.9,
         "mask_val":9999.,
         "modis_grid_size":48,
-        "num_tiles_procs":11,
-        "num_swath_procs":11,
+        "num_tiles_procs":2,
+        "num_swath_procs":4,
         "deterministic":False,
         "samples_per_swath":256,
-        "block_size":8,
+        "block_size":4,
         "buf_size_mb":512,
         ## Substrings constraining swath hdf5s used for traning and validation
-        "train_regions":("neus","seus"),
-        "train_sats":("aqua",),
-        "val_regions":("neus","seus"),
-        "val_sats":("aqua",),
+        "train_regions":("train"),
+        "train_sats":("val"),
+        #"train_regions":("alk", "azn", "hkh", "idn", "neus", "seus"),
+        #"train_sats":("aqua","terra"),
+        #"val_regions":("alk", "azn", "hkh", "idn", "neus", "seus"),
+        #"val_sats":("aqua","terra"),
+        "val_regions":("train"),
+        "val_sats":("val"),
 
-        "notes":"same as ceda-4, but only trained on neus and seus pixels",
+        "notes":"larger latent representation ; moderate sized model ; changes to batch configuration ; trained on weaver dataset",
         }
 ## Count each of the input types for the generators' init function
 config["num_modis_feats"] = len(config["modis_feats"])
@@ -186,6 +190,10 @@ config["tiles_h5s_val"] = list(map(str,filter(
 
 tgen = tiles_dataset(tiles_h5s=config["tiles_h5s_train"], **config)
 vgen = tiles_dataset(tiles_h5s=config["tiles_h5s_val"], **config)
+
+## Probably just use repeat if you set steps_per_epoch and validation_steps
+tgen = tgen.repeat()
+vgen = vgen.repeat()
 
 '''
 vgen = tiles_dataset(
