@@ -1,10 +1,10 @@
 name: learn2
 channels:
 - nvidia
-- pytorch
 - conda-forge
 - nodefaults
 dependencies:
+- python>=3.10
 - botocore
 - cartopy
 - cudnn
@@ -19,4 +19,4 @@ dependencies:
 - s3fs
 - scikit-learn
 - scipy
-- tensorflow=2.15.0
+- tensorflow
