@@ -90,7 +90,7 @@ def eval_model_on_full_swath(md, model, ceres, modis):
     m = modis.data(md.config["modis_feats"])[np.newaxis,...]
     m = (m-mmean)/mstd
     ## trick to process large array row-wise by swapping with the batch axis.
-    m = tf.transpose(m,(1,0,2,3))
+    #m = tf.transpose(m,(1,0,2,3))
     #c = ceres.data(md.config["ceres_labels"])
     #g = np.average(
     #        ceres.data(md.config["ceres_feats"]), axis=0
@@ -105,18 +105,18 @@ def eval_model_on_full_swath(md, model, ceres, modis):
     p = np.full((*m.shape[:-1],1), 1, dtype=float)
     p /= float(p.shape[1]*p.shape[2])
 
-    batch_size = 256
+    batch_size = 16
     agg_disagg = []
-    for i in range(0, m.shape[0], batch_size):
+    for i in range(0, m.shape[1], batch_size):
         with tf.device('/cpu:0'):
-            slc = slice(i,min((i+batch_size, m.shape[0])))
-            agg_disagg.append(model((m[slc],g[slc],p[slc])))
+            slc = slice(i,min((i+batch_size, m.shape[1])))
+            agg_disagg.append(model((m[:,slc],g[:,slc],p[:,slc])))
     agg,disagg = zip(*agg_disagg)
-    agg = tf.concat(agg, axis=0)
-    disagg = tf.concat(disagg, axis=0)
+    agg = np.average(tf.stack(agg, axis=0), axis=0)
+    disagg = tf.concat(disagg, axis=1)
     agg = agg*np.array(cstd)+np.array(cmean)
     disagg = disagg*np.array(cstd)+np.array(cmean)
-    return np.average(agg, axis=0),tf.transpose(disagg,(1,0,2,3))
+    return agg, disagg
 
 def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
     ## Load the model
@@ -131,7 +131,7 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
     sdata = get_swaths_dataset(
             swaths_h5s=[sp],
             model_config=md.config,
-            samples_per_swath=10000,
+            samples_per_swath=512,
             block_size=16,
             num_procs=1,
             )
@@ -156,8 +156,6 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
     agg,disagg = eval_model_on_full_swath(md, model, ceres, modis)
 
     del model
-
-    print(agg.shape, disagg.shape)
 
     if fig_dir is None:
         return agg,disagg
@@ -275,17 +273,16 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
             fig_dir.joinpath(f"{sp.stem}_{md.dir.name}_rgb-lw.png"),
             )
     del lwflux_rgb
-
     return agg,disagg,D,C
 
 if __name__=="__main__":
     swath_dir = Path("data/swaths_val")
     model_dir = Path("data/models/")
-    fig_dir = Path("figures/swaths")
     eval_dir = Path("data/eval")
 
     max_swaths = 48
-    models = [p for p in model_dir.iterdir() if "ceda-2" in p.name]
+    models = [p for p in model_dir.iterdir()
+            if any(s in p.name for s in ("ceda-5",))]
     '''
     swaths = list(map(lambda p:swath_dir.joinpath(p), [
         "swath_alk_aqua_20190419-2304.h5",
