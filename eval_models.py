@@ -12,6 +12,7 @@ from pprint import pprint as ppt
 from datetime import datetime
 import tensorflow as tf
 import pickle as pkl
+import gc
 
 import tracktrain.model_methods as mm
 #from tracktrain.compile_and_train import compile_and_build_dir, train
@@ -68,7 +69,8 @@ def load_model(model_dir:Path, weights_path:Path=None):
 
 def get_swaths_dataset(
         swaths_h5s:list, model_config:dict, samples_per_swath=128,
-        block_size=16, num_procs=1,):
+        block_size=16, num_procs=1
+        ):
     """
     Get a tensorflow dataset generating swaths from the provided list, given
     the configuration defined as a json in a corresponding model dict
@@ -87,11 +89,14 @@ def eval_model_on_full_swath(md, model, ceres, modis):
 
     m = modis.data(md.config["modis_feats"])[np.newaxis,...]
     m = (m-mmean)/mstd
-    c = ceres.data(md.config["ceres_labels"])
+    ## trick to process large array row-wise by swapping with the batch axis.
+    #m = tf.transpose(m,(1,0,2,3))
+    #c = ceres.data(md.config["ceres_labels"])
     #g = np.average(
     #        ceres.data(md.config["ceres_feats"]), axis=0
     #        )[np.newaxis,np.newaxis,np.newaxis,:]
     #g = np.broadcast_to(g, (*m.shape[:-1], g.shape[-1]))
+    #my,mx = m.shape[1:3]
     ## use average geometry conditions for rough estimate since MODIS
     ## geometry scale is currently messed up.
     g = np.zeros((*m.shape[:-1],2))
@@ -100,11 +105,18 @@ def eval_model_on_full_swath(md, model, ceres, modis):
     p = np.full((*m.shape[:-1],1), 1, dtype=float)
     p /= float(p.shape[1]*p.shape[2])
 
-    with tf.device('/cpu:0'):
-        agg,disagg = model((m,g,p))
+    batch_size = 16
+    agg_disagg = []
+    for i in range(0, m.shape[1], batch_size):
+        with tf.device('/cpu:0'):
+            slc = slice(i,min((i+batch_size, m.shape[1])))
+            agg_disagg.append(model((m[:,slc],g[:,slc],p[:,slc])))
+    agg,disagg = zip(*agg_disagg)
+    agg = np.average(tf.stack(agg, axis=0), axis=0)
+    disagg = tf.concat(disagg, axis=1)
     agg = agg*np.array(cstd)+np.array(cmean)
     disagg = disagg*np.array(cstd)+np.array(cmean)
-    return agg,disagg
+    return agg, disagg
 
 def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
     ## Load the model
@@ -119,7 +131,7 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
     sdata = get_swaths_dataset(
             swaths_h5s=[sp],
             model_config=md.config,
-            samples_per_swath=10000,
+            samples_per_swath=512,
             block_size=16,
             num_procs=1,
             )
@@ -129,6 +141,8 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
             agg,disagg = model((m,g,p))
         D.append(agg.numpy())
         C.append(c.numpy())
+    del sdata
+
     C = np.concatenate(C, axis=0)*np.array(cstd)+np.array(cmean)
     D = np.concatenate(D, axis=0)*np.array(cstd)+np.array(cmean)
 
@@ -140,6 +154,8 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
 
     ## evaluate on the full grid
     agg,disagg = eval_model_on_full_swath(md, model, ceres, modis)
+
+    del model
 
     if fig_dir is None:
         return agg,disagg
@@ -174,12 +190,16 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
          modis.data(31)-modis.data(29),
          modis.data(31)]
         ))))
+
     #rgb_dcp[np.logical_not(m_not_oob)] = 0
     #rgb_tc[np.logical_not(m_not_oob)] = 0
     #rgb_dust[np.logical_not(m_not_oob)] = 0
     gp.generate_raw_image(rgb_tc, fig_dir.joinpath(sp.stem+"_rgb-tc.png"))
     gp.generate_raw_image(rgb_dcp, fig_dir.joinpath(sp.stem+"_rgb-dcp.png"))
     gp.generate_raw_image(rgb_dust, fig_dir.joinpath(sp.stem+"_rgb-dust.png"))
+    del modis, rgb_tc, rgb_dcp, rgb_dust
+    gc.collect()
+
     da_1d = np.concatenate(
             (np.squeeze(disagg)[m_not_oob], modis_latlon[m_not_oob]),
             axis=-1
@@ -212,7 +232,7 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
             "cbar_shrink":.6,
             },
         )
-
+    del da_fg1d
     geo_scatter(
         ceres_fg1d=ceres,
         clabel="swflux",
@@ -239,27 +259,31 @@ def eval_swath_grid(swath_path:Path, model_dir:Path, fig_dir:Path=None):
             "cbar_shrink":.6,
             },
         )
+    del ceres
+    gc.collect()
 
     swflux_rgb = rgb_norm(gt.scal_to_rgb(np.squeeze(disagg)[...,0]))
     lwflux_rgb = rgb_norm(gt.scal_to_rgb(np.squeeze(disagg)[...,1]))
     gp.generate_raw_image(
             swflux_rgb,
             fig_dir.joinpath(f"{sp.stem}_{md.dir.name}_rgb-sw.png"))
+    del swflux_rgb
     gp.generate_raw_image(
             lwflux_rgb,
             fig_dir.joinpath(f"{sp.stem}_{md.dir.name}_rgb-lw.png"),
             )
-
+    del lwflux_rgb
     return agg,disagg,D,C
 
 if __name__=="__main__":
     swath_dir = Path("data/swaths_val")
     model_dir = Path("data/models/")
-    fig_dir = Path("figures/swaths")
     eval_dir = Path("data/eval")
 
-    max_swaths = 256
-    models = [p for p in model_dir.iterdir() if "ceda" in p.name]
+    max_swaths = 48
+    models = [p for p in model_dir.iterdir()
+            if any(s in p.name for s in ("ceda-5",))]
+    '''
     swaths = list(map(lambda p:swath_dir.joinpath(p), [
         "swath_alk_aqua_20190419-2304.h5",
         "swath_alk_terra_20180217-2215.h5",
@@ -275,15 +299,22 @@ if __name__=="__main__":
         "swath_seus_aqua_20180908-1844.h5",
         "swath_seus_terra_20200814-1654.h5",
         ]))
+    '''
+    swaths = list(swath_dir.iterdir())
 
     rng = np.random.default_rng(seed=None)
     rng.shuffle(swaths)
-    combos = [(m,s) for m in models for s in swaths[:max_swaths]]
+    combos = [(m,s) for s in swaths[:max_swaths] for m in models]
 
     for md,sp in combos:
         eval_str = f"{sp.stem}_{md.name}"
         single_eval_dir = eval_dir.joinpath(eval_str)
+        if single_eval_dir.exists():
+            print(f"skipping {single_eval_dir}")
+            continue
         single_eval_dir.mkdir(exist_ok=False)
         agg,disagg,pred,ceres = eval_swath_grid(sp, md, single_eval_dir)
         pkl.dump((agg, disagg, pred, ceres),
                  single_eval_dir.joinpath(eval_str+".pkl").open("wb"))
+        del agg, disagg, pred, ceres
+        gc.collect()
